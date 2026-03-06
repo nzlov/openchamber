@@ -259,6 +259,7 @@ const ProjectTile: React.FC<{
   onEdit: () => void;
   onClose: () => void;
 }> = ({ project, isActive, hasStreaming, hasUnread, label, expanded, projectTextVisible, onClick, onEdit, onClose }) => {
+  const { t } = useLanguage();
   const { currentTheme } = useThemeSystem();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [iconImageFailed, setIconImageFailed] = React.useState(false);

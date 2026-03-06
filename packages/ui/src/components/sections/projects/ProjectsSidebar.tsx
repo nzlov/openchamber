@@ -10,6 +10,7 @@ import { RiAddLine, RiFolderLine } from '@remixicon/react';
 import { isDesktopLocalOriginActive, isTauriShell, isVSCodeRuntime, requestDirectoryAccess } from '@/lib/desktop';
 import { sessionEvents } from '@/lib/sessionEvents';
 import { toast } from '@/components/ui';
+import { useLanguage } from '@/hooks/useLanguage';
 import { useThemeSystem } from '@/contexts/useThemeSystem';
 
 export const ProjectsSidebar: React.FC<{ onItemSelect?: () => void }> = ({ onItemSelect }) => {

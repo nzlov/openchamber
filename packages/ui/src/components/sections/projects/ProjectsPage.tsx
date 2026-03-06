@@ -10,6 +10,7 @@ import { PROJECT_COLORS, PROJECT_ICONS, PROJECT_COLOR_MAP as COLOR_MAP, getProje
 import { RiCloseLine } from '@remixicon/react';
 import { WorktreeSectionContent } from '@/components/sections/openchamber/WorktreeSectionContent';
 import { ProjectActionsSection } from '@/components/sections/projects/ProjectActionsSection';
+import { useLanguage } from '@/hooks/useLanguage';
 import { useThemeSystem } from '@/contexts/useThemeSystem';
 
 export const ProjectsPage: React.FC = () => {

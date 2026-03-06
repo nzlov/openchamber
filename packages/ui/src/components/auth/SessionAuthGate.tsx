@@ -6,6 +6,7 @@ import { isDesktopShell, isVSCodeRuntime } from '@/lib/desktop';
 import { syncDesktopSettings, initializeAppearancePreferences } from '@/lib/persistence';
 import { applyPersistedDirectoryPreferences } from '@/lib/directoryPersistence';
 import { DesktopHostSwitcherInline } from '@/components/desktop/DesktopHostSwitcher';
+import { useLanguage } from '@/hooks/useLanguage';
 import { OpenChamberLogo } from '@/components/ui/OpenChamberLogo';
 
 const STATUS_CHECK_ENDPOINT = '/auth/session';

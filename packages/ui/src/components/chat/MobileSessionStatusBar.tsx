@@ -1433,6 +1433,7 @@ export const MobileSessionStatusBar: React.FC<MobileSessionStatusBarProps> = ({
   onSessionSwitch,
   cornerRadius,
 }) => {
+  const { t } = useLanguage();
   const { currentTheme } = useThemeSystem();
   const sessions = useSessionStore((state) => state.sessions);
   const currentSessionId = useSessionStore((state) => state.currentSessionId);
