@@ -77,7 +77,18 @@ const normalizeHost = (candidate) => {
   if (!trimmed) {
     return null;
   }
-  return trimmed.replace(/:\d+$/, '');
+
+  const bracketedIpv6Match = trimmed.match(/^\[([^\]]+)\](?::(\d+))?$/);
+  if (bracketedIpv6Match) {
+    return bracketedIpv6Match[1];
+  }
+
+  const colonCount = trimmed.split(':').length - 1;
+  if (colonCount === 1 && /:\d+$/.test(trimmed)) {
+    return trimmed.replace(/:\d+$/, '');
+  }
+
+  return trimmed;
 };
 
 let cachedCustomLocalHostRaw = null;
