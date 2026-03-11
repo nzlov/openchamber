@@ -2,6 +2,7 @@ import React from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/hooks/useLanguage';
+import { useUIStore } from '@/stores/useUIStore';
 
 interface CommitInputProps {
   value: string;
@@ -9,6 +10,7 @@ interface CommitInputProps {
   placeholder?: string;
   disabled?: boolean;
   hasTouchInput?: boolean;
+  isMobile?: boolean;
 }
 
 const MIN_HEIGHT = 38; // Single line height
@@ -20,10 +22,12 @@ export const CommitInput: React.FC<CommitInputProps> = ({
   placeholder,
   disabled = false,
   hasTouchInput = false,
+  isMobile = false,
 }) => {
   const { t } = useLanguage();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const effectivePlaceholder = placeholder || t('commitSection.commitMessagePlaceholder');
+  const inputSpellcheckEnabled = useUIStore((state) => state.inputSpellcheckEnabled);
 
   // Auto-resize based on content (layout phase to avoid mount flicker)
   React.useLayoutEffect(() => {
@@ -48,7 +52,7 @@ export const CommitInput: React.FC<CommitInputProps> = ({
       disabled={disabled}
       autoCorrect={hasTouchInput ? 'on' : 'off'}
       autoCapitalize={hasTouchInput ? 'sentences' : 'off'}
-      spellCheck={hasTouchInput ? true : false}
+      spellCheck={isMobile || inputSpellcheckEnabled}
       scrollbarClassName="hidden"
       className={cn(
         'rounded-lg bg-transparent resize-none overflow-y-hidden',

@@ -157,7 +157,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onOpenSettings, scrollToBo
     const { currentProviderId, currentModelId, currentVariant, currentAgentName, setAgent, getVisibleAgents } = useConfigStore();
     const agents = getVisibleAgents();
     const primaryAgents = React.useMemo(() => agents.filter((agent) => agent.mode === 'primary'), [agents]);
-    const { isMobile, inputBarOffset, isKeyboardOpen, setTimelineDialogOpen, cornerRadius, persistChatDraft, isExpandedInput, setExpandedInput } = useUIStore();
+    const { isMobile, inputBarOffset, isKeyboardOpen, setTimelineDialogOpen, cornerRadius, persistChatDraft, inputSpellcheckEnabled, isExpandedInput, setExpandedInput } = useUIStore();
     const { working } = useAssistantStatus();
     const { currentTheme } = useThemeSystem();
     const chatSearchDirectory = useChatSearchDirectory();
@@ -1056,7 +1056,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onOpenSettings, scrollToBo
         }
 
         // Handle Enter/Ctrl+Enter based on queue mode
-        if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
+        if (e.key === 'Enter' && !e.shiftKey && (!isMobile || e.ctrlKey || e.metaKey)) {
             e.preventDefault();
 
             const isCtrlEnter = e.ctrlKey || e.metaKey;
@@ -2197,7 +2197,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onOpenSettings, scrollToBo
             }}
             className={cn(
                 footerIconButtonClass,
-                'absolute bottom-full left-1/2 -translate-x-1/2 mb-1',
+                'absolute z-20 bottom-full left-1/2 -translate-x-1/2 mb-1',
                 hasContent && currentSessionId
                     ? 'text-primary hover:text-primary'
                     : 'opacity-30'
@@ -2627,7 +2627,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onOpenSettings, scrollToBo
                                 : undefined}
                         />
                     )}
-                    <div className={cn("relative overflow-hidden", isDesktopExpanded && 'flex-1 min-h-0')}>
+                    <div className={cn("relative overflow-hidden", isDesktopExpanded && 'flex flex-1 min-h-0 flex-col')}>
                         {highlightedComposerContent && (
                             <div
                                 aria-hidden
@@ -2684,7 +2684,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onOpenSettings, scrollToBo
                             disabled={!currentSessionId && !newSessionDraftOpen}
                             autoCorrect={isMobile ? "on" : "off"}
                             autoCapitalize={isMobile ? "sentences" : "off"}
-                            spellCheck={isMobile}
+                            spellCheck={isMobile || inputSpellcheckEnabled}
+                            fillContainer={isDesktopExpanded}
                             outerClassName={cn('focus-within:ring-0', isDesktopExpanded && 'flex-1 min-h-0')}
                             className={cn(
                                 'min-h-[52px] resize-none border-0 px-3 rounded-b-none appearance-none hover:border-transparent bg-transparent relative z-10',
