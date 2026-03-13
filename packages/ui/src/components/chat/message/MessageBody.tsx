@@ -35,6 +35,7 @@ import { ToolRevealOnMount } from './parts/ToolRevealOnMount';
 import { StaticToolRow } from './parts/ProgressiveGroup';
 import { getStaticGroupToolName, isExpandableTool, isStandaloneTool } from './parts/toolRenderUtils';
 import TurnActivity from '../components/TurnActivity';
+import { useLanguage } from '@/hooks/useLanguage';
 
 type SubtaskPartLike = Part & {
     type: 'subtask';
@@ -589,6 +590,7 @@ const AssistantMessageBody: React.FC<Omit<MessageBodyProps, 'isUser'>> = ({
     turnGroupingContext,
     errorMessage,
 }) => {
+    const { t } = useLanguage();
     const streamPhase = _streamPhase;
     void _allowAnimation;
     const [copyHintVisible, setCopyHintVisible] = React.useState(false);

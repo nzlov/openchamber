@@ -45,6 +45,7 @@ export const TimelineDialog: React.FC<TimelineDialogProps> = ({
     onScrollByTurnOffset,
     onResumeToLatest,
 }) => {
+    const { t } = useLanguage();
     const currentSessionId = useSessionStore((state) => state.currentSessionId);
     const messages = useMessageStore((state) =>
         currentSessionId ? state.messages.get(currentSessionId) || [] : []
@@ -195,7 +196,7 @@ export const TimelineDialog: React.FC<TimelineDialogProps> = ({
                 </div>
 
                 <div className="mt-4 p-3 bg-muted/30 rounded-lg">
-                    <p className="typography-meta text-muted-foreground font-medium mb-2">Actions</p>
+                    <p className="typography-meta text-muted-foreground font-medium mb-2">{t('timelineDialog.actions')}</p>
                     <div className="mb-2 flex items-center gap-2">
                         <button
                             type="button"
@@ -205,7 +206,7 @@ export const TimelineDialog: React.FC<TimelineDialogProps> = ({
                                 onOpenChange(false);
                             }}
                         >
-                            Previous turn
+                            {t('timelineDialog.previousTurn')}
                         </button>
                         <span className="text-muted-foreground/50">/</span>
                         <button
@@ -216,7 +217,7 @@ export const TimelineDialog: React.FC<TimelineDialogProps> = ({
                                 onOpenChange(false);
                             }}
                         >
-                            Latest
+                            {t('timelineDialog.latest')}
                         </button>
                     </div>
                     <div className="flex flex-col gap-1.5 typography-meta text-muted-foreground">

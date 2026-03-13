@@ -91,8 +91,8 @@ export const MemoryDebugPanel: React.FC<MemoryDebugPanelProps> = ({ onClose }) =
             <span>{getBackgroundTrimLimit()} messages</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Zombie Timeout:</span>
-            <span>{MEMORY_LIMITS.ZOMBIE_TIMEOUT / 1000 / 60} minutes</span>
+            <span className="text-muted-foreground">{t('memoryDebugPanel.zombieTimeout')}</span>
+            <span>{t('memoryDebugPanel.zombieTimeoutValue', { minutes: MEMORY_LIMITS.ZOMBIE_TIMEOUT / 1000 / 60 })}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">{t('memoryDebugPanel.githubTotalRequests')}</span>

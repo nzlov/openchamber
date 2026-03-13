@@ -20,6 +20,7 @@ import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useUIStore } from '@/stores/useUIStore';
 import ReasoningPart from './ReasoningPart';
 import JustificationBlock from './JustificationBlock';
+import { useLanguage } from '@/hooks/useLanguage';
 
 interface DiffStats {
     additions: number;
@@ -715,6 +716,7 @@ const ProgressiveGroup: React.FC<ProgressiveGroupProps> = ({
     animateRows = true,
     animatedToolIds,
 }) => {
+    const { t } = useLanguage();
     void _streamPhase;
     const previewCount = showHeader && !isExpanded
         ? Math.max(0, Math.floor(collapsedPreviewCount))
@@ -884,7 +886,7 @@ const ProgressiveGroup: React.FC<ProgressiveGroupProps> = ({
                         <RiStackLine className="h-3.5 w-3.5" />
                     </span>
                     <span className="typography-meta leading-5 font-medium inline-flex h-5 items-center flex-shrink-0" style={{ color: 'var(--tools-title)' }}>
-                        Activity
+                        {t('progressiveGroup.activity')}
                     </span>
                     {hasToolMetric ? (
                         <span className="typography-meta leading-5 text-muted-foreground/80 flex-shrink-0">

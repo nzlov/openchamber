@@ -15,6 +15,7 @@ import { useUIStore } from "@/stores/useUIStore";
 import { WorkingPlaceholder } from "./message/parts/WorkingPlaceholder";
 import { isVSCodeRuntime } from "@/lib/desktop";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLanguage } from "@/hooks/useLanguage";
 
 const statusConfig: Record<TodoStatus, { textClassName: string }> = {
   in_progress: {

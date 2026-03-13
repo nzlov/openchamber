@@ -25,6 +25,7 @@ import {
     collectVisibleSessionIdsForBlockingRequests,
     flattenBlockingRequests,
 } from './lib/blockingRequests';
+import { useLanguage } from '@/hooks/useLanguage';
 
 const EMPTY_MESSAGES: Array<{ info: Message; parts: Part[] }> = [];
 const EMPTY_PERMISSIONS: PermissionRequest[] = [];

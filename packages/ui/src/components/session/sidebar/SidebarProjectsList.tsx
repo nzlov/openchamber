@@ -93,7 +93,7 @@ export function SidebarProjectsList(props: Props): React.ReactNode {
               ?? activeSection.groups.find((candidate) => candidate.isMain)
               ?? activeSection.groups[0];
             if (!primaryGroup) {
-              return <div className="py-1 text-left typography-micro text-muted-foreground">No sessions yet.</div>;
+              return <div className="py-1 text-left typography-micro text-muted-foreground">{t('sessionSidebar.noSessionsYetDot')}</div>;
             }
             const archivedGroup = activeSection.groups.find((candidate) => candidate.isArchivedBucket);
             const groupsToRender = [
