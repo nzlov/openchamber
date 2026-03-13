@@ -134,8 +134,8 @@ const ACTIVITY_RENDER_MODE_OPTIONS: Option<'collapsed' | 'summary'>[] = [
     },
     {
         id: 'summary',
-        label: 'appearance.toolOutputSummary',
-        description: 'appearance.activityDefaultSummaryDesc',
+        label: 'Expanded',
+        description: 'Expand Activity by default.',
     },
 ];
 

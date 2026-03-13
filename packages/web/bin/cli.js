@@ -7,6 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { isModuleCliExecution } from './cli-entry.js';
 import { cloudflareTunnelProviderCapabilities } from '../server/lib/tunnels/providers/cloudflare.js';
 import {
   intro as clackIntro, outro as clackOutro, log as clackLog,
@@ -2730,6 +2731,7 @@ const commands = {
 
     const child = spawn(runtimeBin, serverArgs, {
       detached: true,
+      windowsHide: true,
       stdio: ['ignore', logFd, logFd, 'ipc'],
       env: {
         ...process.env,
@@ -4614,17 +4616,7 @@ async function main() {
   await commands[command](options);
 }
 
-const isCliExecution = (() => {
-  const entry = process.argv[1];
-  if (typeof entry !== 'string' || entry.length === 0) {
-    return false;
-  }
-  try {
-    return pathToFileURL(path.resolve(entry)).href === import.meta.url;
-  } catch {
-    return false;
-  }
-})();
+const isCliExecution = isModuleCliExecution(process.argv[1], import.meta.url, fs.realpathSync, 'openchamber');
 
 if (isCliExecution) {
   let isHandlingSigint = false;

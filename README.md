@@ -11,6 +11,10 @@
 > We rotated the desktop updater signing key after moving the repository to the organization, so in-app auto-update from older desktop builds may fail signature verification.
 > This is a one-time reinstall and does not affect app functionality.
 
+> [!IMPORTANT]
+> **CLI users:** A startup regression in global npm/bun installs (symlink/wrapper entrypoints) is fixed in **OpenChamber v1.8.7**.
+> If `openchamber` exited without output on `--version`/`status`, update to **v1.8.7** from npm: `npm i -g @openchamber/web@1.8.7` or `bun add -g @openchamber/web@1.8.7`.
+
 ## **OpenCode, everywhere.** Desktop. Browser. Phone.
 
 ### A rich interface for [OpenCode](https://opencode.ai). Review diffs, manage agents, run dev servers, and keep the big picture while your AI codes.
@@ -189,20 +193,6 @@ chown -R 1000:1000 data/
 
 </details>
 
-<details>
-<summary>Named Cloudflare Tunnel (persistent hostname)</summary>
-
-- [OpenCode CLI](https://opencode.ai) installed
-- Node.js 20+ (for web version)
-- [cloudflared](https://github.com/cloudflare/cloudflared/releases) (required for Cloudflare tunnel modes)
-For reliable long-lived access with a custom hostname from your Cloudflare account:
-
-- Configure in-app at **Settings > OpenChamber > Tunnel**, switch to **Named** mode.
-- Requires a domain in your Cloudflare account.
-- [Cloudflare setup guide](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/)
-- CLI `--tunnel <config.yml>` support is coming very soon.
-
-</details>
 
 ## Features
 
