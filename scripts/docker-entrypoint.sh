@@ -36,11 +36,6 @@ fi
 echo "[entrypoint] SSH public key:"
 cat "${SSH_PUBLIC_KEY_PATH}"
 
-# Handle UI password environment variable
-if [ -n "${UI_PASSWORD:-}" ]; then
-  echo "[entrypoint] UI password set, enabling authentication"
-fi
-
 if [ "${OH_MY_OPENCODE:-false}" = "true" ]; then
   OMO_CONFIG_FILE="${OPENCODE_CONFIG_DIR}/oh-my-opencode.json"
 
@@ -61,10 +56,9 @@ if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
 
-set -- bun packages/web/bin/cli.js
+set -- bun packages/web/server/index.js --port "${OPENCHAMBER_PORT:-3000}"
 if [ -n "${UI_PASSWORD:-}" ]; then
+  echo "[entrypoint] UI password set, enabling authentication"
   set -- "$@" --ui-password "$UI_PASSWORD"
 fi
-"$@"
-
-bun packages/web/bin/cli.js logs
+exec "$@"
