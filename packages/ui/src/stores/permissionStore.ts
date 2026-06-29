@@ -1,13 +1,13 @@
 import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
-import type { Session } from "@opencode-ai/sdk/v2/client";
+import type { Session } from "@/lib/codex/types";
 import {
     autoRespondsPermission,
     type PermissionAutoAcceptMap,
 } from "./utils/permissionAutoAccept";
 import { getSafeStorage } from "./utils/safeStorage";
 import { getAllSyncSessions, getSyncChildStores } from "@/sync/sync-refs";
-import { opencodeClient } from "@/lib/opencode/client";
+import { codexRuntimeClient } from "@/lib/codex/runtime-client";
 import { respondToPermission } from "@/sync/session-actions";
 import { useSessionUIStore } from "@/sync/session-ui-store";
 import { runtimeFetch } from "@/lib/runtime-fetch";
@@ -149,7 +149,7 @@ const sessionBelongsToScope = async (
 
         for (const directory of directories) {
             try {
-                const result = await opencodeClient.getScopedSdkClient(directory).session.get({
+                const result = await codexRuntimeClient.getScopedSdkClient(directory).session.get({
                     sessionID: id,
                     directory,
                 });
@@ -163,7 +163,7 @@ const sessionBelongsToScope = async (
         }
 
         try {
-            const result = await opencodeClient.getSdkClient().session.get({ sessionID: id });
+            const result = await codexRuntimeClient.getSdkClient().session.get({ sessionID: id });
             if (result.data) {
                 fetchedById.set(id, result.data);
                 return result.data;
@@ -236,7 +236,7 @@ export const usePermissionStore = create<PermissionStore>()(
                     // Mirror inherited state to the server so it can suppress
                     // permission notifications before the client auto-response
                     // round-trip. Send known descendants too; server-side
-                    // ancestry lookup can lag OpenCode session indexing.
+                    // ancestry lookup can lag Codex session indexing.
                     for (const scopedSessionId of sessionScope) {
                         void runtimeFetch('/api/notifications/auto-accept', {
                             method: 'POST',
@@ -251,7 +251,7 @@ export const usePermissionStore = create<PermissionStore>()(
 
                     const sessionDirectory = useSessionUIStore.getState().getDirectoryForSession(sessionId);
                     const directories = new Set<string>();
-                    const currentDirectory = normalizeDirectoryCandidate(opencodeClient.getDirectory());
+                    const currentDirectory = normalizeDirectoryCandidate(codexRuntimeClient.getDirectory());
                     if (currentDirectory) {
                         directories.add(currentDirectory);
                     }
@@ -271,7 +271,7 @@ export const usePermissionStore = create<PermissionStore>()(
                     // Best-effort: if listPendingPermissions throws (transient fetch failure),
                     // proceed with whatever sync-store snapshots gave us. The next SSE event
                     // or reconnect resync will auto-accept anything we missed.
-                    const pendingFromApi = await opencodeClient
+                    const pendingFromApi = await codexRuntimeClient
                       .listPendingPermissions({ directories: Array.from(directories) })
                       .catch(() => []);
                     const mergedPending = new Map<string, { id: string; sessionID: string }>();

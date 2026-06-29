@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useSessionWorktreeStore } from './session-worktree-store';
@@ -202,9 +202,9 @@ describe('routeMessage directory scoping', () => {
     // The session directory travels as an explicit request param (not via
     // client-wide directory scoping), so concurrent sends can't cross-talk.
     const calls = [];
-    const originalShellSession = opencodeClient.shellSession;
+    const originalShellSession = codexRuntimeClient.shellSession;
 
-    opencodeClient.shellSession = async (params) => {
+    codexRuntimeClient.shellSession = async (params) => {
       calls.push(params);
       return { info: {}, parts: [] };
     };
@@ -219,7 +219,7 @@ describe('routeMessage directory scoping', () => {
         inputMode: 'shell',
       });
     } finally {
-      opencodeClient.shellSession = originalShellSession;
+      codexRuntimeClient.shellSession = originalShellSession;
     }
 
     expect(calls).toHaveLength(1);
@@ -284,9 +284,9 @@ describe('openNewSessionDraft project binding', () => {
 });
 
 describe('routeMessage skill invocation', () => {
-  // OpenCode registers every skill as a command (source: "skill"), so a skill
-  // selected from the slash menu must be dispatched via session.command so its
-  // content is injected — not sent as a plain "/name" text message (issue #1605).
+  // Codex registers every skill as a command (source: "skill"), so a skill
+  // selected from the slash menu must be dispatched through the skill path, not
+  // sent as a plain "/name" text message (issue #1605).
   const sendCommandCalls = [];
   const sendMessageCalls = [];
   let originalSendCommand;
@@ -306,7 +306,7 @@ describe('routeMessage skill invocation', () => {
       ensureChild: () => childStore,
       getChild: () => childStore,
     };
-    setActionRefs(opencodeClient, childStores, () => '/skills/project');
+    setActionRefs(codexRuntimeClient, childStores, () => '/skills/project');
     setOptimisticRefs(() => {}, () => {});
     useConfigStore.setState({ isConnected: true });
 
@@ -315,27 +315,27 @@ describe('routeMessage skill invocation', () => {
     useCommandsStore.setState({ commands: [] });
     useSkillsStore.setState({ skills: [] });
 
-    originalSendCommand = opencodeClient.sendCommand;
-    originalSendMessage = opencodeClient.sendMessage;
-    opencodeClient.sendCommand = async (params) => {
+    originalSendCommand = codexRuntimeClient.sendCommand;
+    originalSendMessage = codexRuntimeClient.sendMessage;
+    codexRuntimeClient.sendCommand = async (params) => {
       sendCommandCalls.push(params);
       return 'msg';
     };
-    opencodeClient.sendMessage = async (params) => {
+    codexRuntimeClient.sendMessage = async (params) => {
       sendMessageCalls.push(params);
       return 'msg';
     };
   });
 
   afterEach(() => {
-    opencodeClient.sendCommand = originalSendCommand;
-    opencodeClient.sendMessage = originalSendMessage;
+    codexRuntimeClient.sendCommand = originalSendCommand;
+    codexRuntimeClient.sendMessage = originalSendMessage;
     useSkillsStore.setState({ skills: [] });
   });
 
   test('invokes a user-installed skill as a command', async () => {
     useSkillsStore.setState({
-      skills: [{ name: 'grill-with-docs', path: '/skills/grill-with-docs/SKILL.md', scope: 'user', source: 'opencode' }],
+      skills: [{ name: 'grill-with-docs', path: '/skills/grill-with-docs/SKILL.md', scope: 'user', source: 'codex' }],
     });
 
     await routeMessage({
@@ -353,7 +353,7 @@ describe('routeMessage skill invocation', () => {
 
   test('forwards trailing arguments to the skill command', async () => {
     useSkillsStore.setState({
-      skills: [{ name: 'grill-with-docs', path: '/skills/grill-with-docs/SKILL.md', scope: 'user', source: 'opencode' }],
+      skills: [{ name: 'grill-with-docs', path: '/skills/grill-with-docs/SKILL.md', scope: 'user', source: 'codex' }],
     });
 
     await routeMessage({

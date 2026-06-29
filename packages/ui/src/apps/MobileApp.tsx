@@ -5,7 +5,6 @@ import type { IconName } from '@/components/icon/icons';
 import { McpIcon } from '@/components/icons/McpIcon';
 import { McpDropdownContent } from '@/components/mcp/McpDropdown';
 import { AboutSettings } from '@/components/sections/openchamber/AboutSettings';
-import { OpenCodeUpdateToast } from '@/components/update/OpenCodeUpdateToast';
 import { ConfigUpdateOverlay } from '@/components/ui/ConfigUpdateOverlay';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { ChatView } from '@/components/views/ChatView';
@@ -22,7 +21,7 @@ import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { useRouter } from '@/hooks/useRouter';
 import { useUpdatePolling } from '@/hooks/useUpdatePolling';
 import { useWindowTitle } from '@/hooks/useWindowTitle';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import type { ProjectEntry, RuntimeAPIs } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
 import { resolveProjectForDirectory, resolveProjectForSessionDirectory } from '@/lib/projectResolution';
@@ -1111,7 +1110,7 @@ export function MobileApp({ apis }: MobileAppProps) {
 
   React.useEffect(() => {
     if (!isConnected) return;
-    opencodeClient.setDirectory(currentDirectory);
+    codexRuntimeClient.setDirectory(currentDirectory);
   }, [currentDirectory, isConnected]);
 
   React.useEffect(() => {
@@ -1195,12 +1194,11 @@ export function MobileApp({ apis }: MobileAppProps) {
 
   return (
     <ErrorBoundary>
-      <SyncProvider sdk={opencodeClient.getSdkClient()} directory={currentDirectory || ''}>
+      <SyncProvider sdk={codexRuntimeClient.getSdkClient()} directory={currentDirectory || ''}>
         <RuntimeAPIProvider apis={apis}>
           <TooltipProvider delayDuration={300} skipDelayDuration={150}>
             <div className="h-full bg-background text-foreground">
               <SyncAppEffects embeddedBackgroundWorkEnabled={isInitialized} />
-              <OpenCodeUpdateToast />
               <MobileShell />
               <Toaster />
               {isInitialized ? <ConfigUpdateOverlay /> : null}

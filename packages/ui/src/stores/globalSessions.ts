@@ -1,4 +1,4 @@
-import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2";
+import type { CodexRuntimeSdkClient, Session } from "@/lib/codex/types";
 import { retry } from "@/sync/retry";
 import { stripSessionListDetails } from "@/sync/sanitize";
 
@@ -10,20 +10,12 @@ export type GlobalSessionRecord = Session & {
     } | null;
 };
 
-const toNumber = (value: string | null): number | null => {
-    if (!value) {
-        return null;
-    }
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-};
-
 const readResponseHeader = (response: unknown, header: string): string | null => {
     if (!response || typeof response !== "object") {
         return null;
     }
-    const container = response as { headers?: unknown };
-    const headers = container.headers;
+    const container = response as { headers?: unknown; response?: { headers?: unknown } };
+    const headers = container.headers ?? container.response?.headers;
     if (!headers || typeof headers !== "object") {
         return null;
     }
@@ -74,7 +66,7 @@ const unwrapSessionList = (
 };
 
 export async function listGlobalSessionPages(
-    apiClient: OpencodeClient,
+    apiClient: CodexRuntimeSdkClient,
     options: {
         directory?: string;
         archived: boolean;
@@ -85,7 +77,7 @@ export async function listGlobalSessionPages(
 ): Promise<GlobalSessionRecord[]> {
     const all: GlobalSessionRecord[] = [];
     const seenIds = new Set<string>();
-    let cursor: number | undefined;
+    let cursor: string | undefined;
 
     while (true) {
         const response = await retry(
@@ -117,16 +109,11 @@ export async function listGlobalSessionPages(
         // Stop on partial page — nothing more to fetch.
         if (payload.length < options.pageSize) break;
 
-        // Prefer server header; fall back to last session's `time.updated`
-        // (cursor semantics on server = "updated strictly before this timestamp").
-        const headerCursor = toNumber(readResponseHeader(response, "x-next-cursor"));
-        const lastUpdated = payload[payload.length - 1]?.time?.updated;
-        const nextCursor = headerCursor
-            ?? (typeof lastUpdated === "number" && Number.isFinite(lastUpdated) ? lastUpdated : undefined);
+        const nextCursor = readResponseHeader(response, "x-next-cursor") ?? undefined;
 
         if (nextCursor === undefined) break;
-        // Loop guard: cursor must move backwards in time.
-        if (cursor !== undefined && nextCursor >= cursor) break;
+        // Loop guard: cursor must advance.
+        if (cursor !== undefined && nextCursor === cursor) break;
         // Every id in this page already seen — stop to avoid spinning.
         if (appended === 0) break;
 

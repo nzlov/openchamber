@@ -141,7 +141,7 @@ export async function proxyApiRequest(options: {
   signal?: AbortSignal;
 }): Promise<ProxiedApiResponse> {
   // Do not impose a bridge-level timeout. Let the original fetch's AbortSignal
-  // (or OpenCode server response timing) control the lifecycle.
+  // (or Codex runtime response timing) control the lifecycle.
   const { signal, ...payload } = options;
   return sendBridgeMessageWithOptions<ProxiedApiResponse>('api:proxy', payload, {
     timeoutMs: 0,

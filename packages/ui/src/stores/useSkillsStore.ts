@@ -10,12 +10,12 @@ import {
 import { getSafeStorage } from "./utils/safeStorage";
 import { runtimeFetch } from "@/lib/runtime-fetch";
 
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 
 const getCurrentDirectory = (): string | null => {
-  const opencodeDirectory = opencodeClient.getDirectory();
-  if (typeof opencodeDirectory === 'string' && opencodeDirectory.trim().length > 0) {
-    return opencodeDirectory;
+  const codexDirectory = codexRuntimeClient.getDirectory();
+  if (typeof codexDirectory === 'string' && codexDirectory.trim().length > 0) {
+    return codexDirectory;
   }
 
   try {
@@ -32,7 +32,7 @@ const getCurrentDirectory = (): string | null => {
 };
 
 export type SkillScope = 'user' | 'project';
-export type SkillSource = 'opencode' | 'claude' | 'agents';
+export type SkillSource = 'codex' | 'claude' | 'agents';
 
 export interface SupportingFile {
   name: string;
@@ -72,8 +72,8 @@ export interface DiscoveredSkill {
 }
 
 /** Parse the domain group folder from a skill file path.
- *  e.g. "~/.config/opencode/skills/automation-ai/ai-production/SKILL.md" → "automation-ai"
- *  e.g. "~/.config/opencode/skills/theme-system/SKILL.md"                → undefined (flat)
+ *  e.g. "~/.codex/skills/automation-ai/ai-production/SKILL.md" -> "automation-ai"
+ *  e.g. "~/.codex/skills/theme-system/SKILL.md"                -> undefined (flat)
  */
 function parseSkillGroup(path: string): string | undefined {
   const normalizedPath = path.replace(/\\/g, '/');
@@ -232,7 +232,7 @@ export const useSkillsStore = create<SkillsStore>()(
                   name: s.name,
                   path: s.path,
                   scope: s.scope ?? 'user',
-                  source: s.source ?? 'opencode',
+                  source: s.source ?? 'codex',
                   description: s.sources?.md?.description || '',
                   group: parseSkillGroup(s.path),
                 }));
@@ -309,7 +309,7 @@ export const useSkillsStore = create<SkillsStore>()(
             invalidateSkillsLoadCache(currentDirectory);
             if (needsReload) {
               requiresReload = true;
-              await refreshSkillsAfterOpenCodeRestart({
+              await refreshSkillsAfterCodexRestart({
                 message: payload?.message,
                 delayMs: payload?.reloadDelayMs,
               });
@@ -360,7 +360,7 @@ export const useSkillsStore = create<SkillsStore>()(
             invalidateSkillsLoadCache(currentDirectory);
             if (needsReload) {
               requiresReload = true;
-              await refreshSkillsAfterOpenCodeRestart({
+              await refreshSkillsAfterCodexRestart({
                 message: payload?.message,
                 delayMs: payload?.reloadDelayMs,
               });
@@ -402,7 +402,7 @@ export const useSkillsStore = create<SkillsStore>()(
             invalidateSkillsLoadCache(currentDirectory);
             if (needsReload) {
               requiresReload = true;
-              await refreshSkillsAfterOpenCodeRestart({
+              await refreshSkillsAfterCodexRestart({
                 message: payload?.message,
                 delayMs: payload?.reloadDelayMs,
               });
@@ -506,7 +506,7 @@ if (typeof window !== "undefined") {
   window.__zustand_skills_store__ = useSkillsStore;
 }
 
-async function waitForOpenCodeConnection(delayMs?: number) {
+async function waitForCodexConnection(delayMs?: number) {
   const initialPause = typeof delayMs === "number" && delayMs > 0
     ? Math.min(delayMs, FAST_HEALTH_POLL_INTERVAL_MS)
     : 0;
@@ -521,14 +521,14 @@ async function waitForOpenCodeConnection(delayMs?: number) {
 
   while (Date.now() - start < MAX_HEALTH_WAIT_MS) {
     attempt += 1;
-    updateConfigUpdateMessage(`Waiting for OpenCode… (attempt ${attempt})`);
+    updateConfigUpdateMessage(`Waiting for Codex… (attempt ${attempt})`);
 
     try {
-      const isHealthy = await opencodeClient.checkHealth();
+      const isHealthy = await codexRuntimeClient.checkHealth();
       if (isHealthy) {
         return;
       }
-      lastError = new Error("OpenCode health check reported not ready");
+      lastError = new Error("Codex health check reported not ready");
     } catch (error) {
       lastError = error;
     }
@@ -547,10 +547,10 @@ async function waitForOpenCodeConnection(delayMs?: number) {
     await sleep(waitMs);
   }
 
-  throw lastError || new Error("OpenCode did not become ready in time");
+  throw lastError || new Error("Codex did not become ready in time");
 }
 
-export async function refreshSkillsAfterOpenCodeRestart(options?: { message?: string; delayMs?: number }) {
+export async function refreshSkillsAfterCodexRestart(options?: { message?: string; delayMs?: number }) {
   try {
     updateConfigUpdateMessage(options?.message || "Refreshing skills…");
   } catch {
@@ -558,7 +558,7 @@ export async function refreshSkillsAfterOpenCodeRestart(options?: { message?: st
   }
 
   try {
-    await waitForOpenCodeConnection(options?.delayMs);
+    await waitForCodexConnection(options?.delayMs);
     updateConfigUpdateMessage("Refreshing skills…");
     const skillsStore = useSkillsStore.getState();
     invalidateSkillsLoadCache();
@@ -567,7 +567,7 @@ export async function refreshSkillsAfterOpenCodeRestart(options?: { message?: st
       emitConfigChange("skills", { source: CONFIG_EVENT_SOURCE });
     }
   } catch (error) {
-    updateConfigUpdateMessage("OpenCode refresh failed. Please retry.");
+    updateConfigUpdateMessage("Codex refresh failed. Please retry.");
     await sleep(1500);
     throw error;
   } finally {

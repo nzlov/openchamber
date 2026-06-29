@@ -10,7 +10,7 @@ import { useI18n } from '@/lib/i18n';
 import { useUIStore } from '@/stores/useUIStore';
 import { isVSCodeRuntime } from '@/lib/desktop';
 
-type CommandSource = 'openchamber' | 'opencode' | 'skill';
+type CommandSource = 'openchamber' | 'codex' | 'skill';
 
 export interface CommandInfo {
   id: string;
@@ -115,9 +115,9 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
       try {
         const skillNames = new Set(skills.map((skill) => skill.name));
         const customCommands: CommandInfo[] = commandsWithMetadata.map((cmd, index) => ({
-          id: `opencode:${cmd.scope ?? 'global'}:${cmd.name}:${cmd.agent ?? ''}:${cmd.model ?? ''}:${index}`,
+          id: `codex:${cmd.scope ?? 'global'}:${cmd.name}:${cmd.agent ?? ''}:${cmd.model ?? ''}:${index}`,
           name: cmd.name,
-          source: 'opencode',
+          source: 'codex',
           description: cmd.description,
           agent: cmd.agent ?? undefined,
           model: cmd.model ?? undefined,
@@ -126,7 +126,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
           scope: cmd.scope,
         }));
         const skillCommands: CommandInfo[] = skills.map((skill, index) => ({
-          id: `skill:${skill.scope}:${skill.source ?? 'opencode'}:${skill.name}:${index}`,
+          id: `skill:${skill.scope}:${skill.source ?? 'codex'}:${skill.name}:${index}`,
           name: skill.name,
           source: 'skill',
           description: skill.description,

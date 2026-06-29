@@ -2,13 +2,13 @@
   "metadata": {
     "id": "rosepine-light",
     "name": "Rose Pine",
-    "description": "Ported from OpenCode Rose Pine theme (light variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex Rose Pine theme (light variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "light",
     "tags": [
       "light",
-      "opencode",
+      "codex",
       "ported",
       "rosepine"
     ]

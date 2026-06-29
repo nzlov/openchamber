@@ -138,30 +138,31 @@ function getPreferredServerRuntime() {
   return isBunInstalled() ? 'bun' : 'node';
 }
 
-async function checkOpenCodeCLI(onNotice) {
-  if (process.env.OPENCODE_BINARY) {
-    const override = resolveExplicitBinary(process.env.OPENCODE_BINARY);
+async function checkCodexCLI(onNotice) {
+  const configuredBinary = process.env.OPENCHAMBER_CODEX_BINARY || process.env.CODEX_BINARY;
+  if (configuredBinary) {
+    const override = resolveExplicitBinary(configuredBinary);
     if (override) {
-      process.env.OPENCODE_BINARY = override;
+      process.env.OPENCHAMBER_CODEX_BINARY = override;
       return override;
     }
-    const message = `OPENCODE_BINARY="${process.env.OPENCODE_BINARY}" is not an executable file. Falling back to PATH lookup.`;
+    const message = `Configured Codex binary "${configuredBinary}" is not an executable file. Falling back to PATH lookup.`;
     if (typeof onNotice === 'function') {
-      onNotice({ level: 'warning', code: 'OPENCODE_BINARY_INVALID', message });
+      onNotice({ level: 'warning', code: 'CODEX_BINARY_INVALID', message });
     } else {
       console.warn(`Warning: ${message}`);
     }
   }
 
-  const resolvedFromPath = searchPathFor('opencode');
+  const resolvedFromPath = searchPathFor('codex');
   if (resolvedFromPath) {
-    process.env.OPENCODE_BINARY = resolvedFromPath;
+    process.env.OPENCHAMBER_CODEX_BINARY = resolvedFromPath;
     return resolvedFromPath;
   }
 
   throw new Error(
-    `Unable to locate the opencode CLI on PATH (${process.env.PATH || '<empty>'}). ` +
-    'Ensure the CLI is installed and reachable, or set OPENCODE_BINARY to its full path.'
+    `Unable to locate the codex CLI on PATH (${process.env.PATH || '<empty>'}). ` +
+    'Ensure the CLI is installed and reachable, or set OPENCHAMBER_CODEX_BINARY to its full path.'
   );
 }
 
@@ -187,7 +188,7 @@ const commands = {
 commands.serve = createServeCommand({
   serverPath: path.join(__dirname, '..', 'server', 'index.js'),
   bunBin: BUN_BIN,
-  checkOpenCodeCLI,
+  checkCodexCLI,
   getPreferredServerRuntime,
   setForegroundServerActive(value) { foregroundServerActive = value; },
   setForegroundShutdown(handler) { foregroundShutdown = handler; },

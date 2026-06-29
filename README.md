@@ -2,16 +2,16 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/btriapitsyn/openchamber?style=flat&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgZmlsbD0iI2YxZWNlYyIgdmlld0JveD0iMCAwIDI1NiAyNTYiPjxwYXRoIGQ9Ik0yMjkuMDYsMTA4Ljc5bC00OC43LDQyLDE0Ljg4LDYyLjc5YTguNCw4LjQsMCwwLDEtMTIuNTIsOS4xN0wxMjgsMTg5LjA5LDczLjI4LDIyMi43NGE4LjQsOC40LDAsMCwxLTEyLjUyLTkuMTdsMTQuODgtNjIuNzktNDguNy00MkE4LjQ2LDguNDYsMCwwLDEsMzEuNzMsOTRMOTUuNjQsODguOGwyNC42Mi01OS42YTguMzYsOC4zNiwwLDAsMSwxNS40OCwwbDI0LjYyLDU5LjZMMjI0LjI3LDk0QTguNDYsOC40NiwwLDAsMSwyMjkuMDYsMTA4Ljc5WiIgb3BhY2l0eT0iMC4yIj48L3BhdGg%2BPHBhdGggZD0iTTIzOS4xOCw5Ny4yNkExNi4zOCwxNi4zOCwwLDAsMCwyMjQuOTIsODZsLTU5LTQuNzZMMTQzLjE0LDI2LjE1YTE2LjM2LDE2LjM2LDAsMCwwLTMwLjI3LDBMOTAuMTEsODEuMjMsMzEuMDgsODZhMTYuNDYsMTYuNDYsMCwwLDAtOS4zNywyOC44Nmw0NSwzOC44M0w1MywyMTEuNzVhMTYuMzgsMTYuMzgsMCwwLDAsMjQuNSwxNy44MkwxMjgsMTk4LjQ5bDUwLjUzLDMxLjA4QTE2LjQsMTYuNCwwLDAsMCwyMDMsMjExLjc1bC0xMy43Ni01OC4wNyw0NS0zOC44M0ExNi40MywxNi40MywwLDAsMCwyMzkuMTgsOTcuMjZabS0xNS4zNCw1LjQ3LTQ4LjcsNDJhOCw4LDAsMCwwLTIuNTYsNy45MWwxNC44OCw2Mi44YS4zNy4zNywwLDAsMS0uMTcuNDhjLS4xOC4xNC0uMjMuMTEtLjM4LDBsLTU0LjcyLTMzLjY1YTgsOCwwLDAsMC04LjM4LDBMNjkuMDksMjE1Ljk0Yy0uMTUuMDktLjE5LjEyLS4zOCwwYS4zNy4zNywwLDAsMS0uMTctLjQ4bDE0Ljg4LTYyLjhhOCw4LDAsMCwwLTIuNTYtNy45MWwtNDguNy00MmMtLjEyLS4xLS4yMy0uMTktLjEzLS41cy4xOC0uMjcuMzMtLjI5bDYzLjkyLTUuMTZBOCw4LDAsMCwwLDEwMyw5MS44NmwyNC42Mi01OS42MWMuMDgtLjE3LjExLS4yNS4zNS0uMjVzLjI3LjA4LjM1LjI1TDE1Myw5MS44NmE4LDgsMCwwLDAsNi43NSw0LjkybDYzLjkyLDUuMTZjLjE1LDAsLjI0LDAsLjMzLjI5UzIyNCwxMDIuNjMsMjIzLjg0LDEwMi43M1oiPjwvcGF0aD48L3N2Zz4%3D&logoColor=FFFCF0&labelColor=100F0F&color=66800B)](https://github.com/btriapitsyn/openchamber/stargazers)
 [![GitHub release](https://img.shields.io/github/v/release/btriapitsyn/openchamber?style=flat&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgZmlsbD0iI2YxZWNlYyIgdmlld0JveD0iMCAwIDI1NiAyNTYiPjxwYXRoIGQ9Ik0xMjgsMTI5LjA5VjIzMmE4LDgsMCwwLDEtMy44NC0xbC04OC00OC4xOGE4LDgsMCwwLDEtNC4xNi03VjgwLjE4YTgsOCwwLDAsMSwuNy0zLjI1WiIgb3BhY2l0eT0iMC4yIj48L3BhdGg%2BPHBhdGggZD0iTTIyMy42OCw2Ni4xNSwxMzUuNjgsMThhMTUuODgsMTUuODgsMCwwLDAtMTUuMzYsMGwtODgsNDguMTdhMTYsMTYsMCwwLDAtOC4zMiwxNHY5NS42NGExNiwxNiwwLDAsMCw4LjMyLDE0bDg4LDQ4LjE3YTE1Ljg4LDE1Ljg4LDAsMCwwLDE1LjM2LDBsODgtNDguMTdhMTYsMTYsMCwwLDAsOC4zMi0xNFY4MC4xOEExNiwxNiwwLDAsMCwyMjMuNjgsNjYuMTVaTTEyOCwzMmw4MC4zNCw0NC0yOS43NywxNi4zLTgwLjM1LTQ0Wk0xMjgsMTIwLDQ3LjY2LDc2bDMzLjktMTguNTYsODAuMzQsNDRaTTQwLDkwbDgwLDQzLjc4djg1Ljc5TDQwLDE3NS44MlptMTc2LDg1Ljc4aDBsLTgwLDQzLjc5VjEzMy44MmwzMi0xNy41MVYxNTJhOCw4LDAsMCwwLDE2LDBWMTA3LjU1TDIxNiw5MHY4NS43N1oiPjwvcGF0aD48L3N2Zz4%3D&logoColor=FFFCF0&labelColor=100F0F&color=205EA6)](https://github.com/btriapitsyn/openchamber/releases/latest)
-[![Created with OpenCode](docs/references/badges/created-with-opencode.svg)](https://opencode.ai)
+[![Created with Codex](docs/references/badges/created-with-codex.svg)](https://openai.com/codex)
 [![Discord](https://img.shields.io/badge/Discord-join.svg?style=flat&labelColor=100F0F&color=8B7EC8&logo=discord&logoColor=FFFCF0)](https://discord.gg/ZYRSdnwwKA)
 [![Support the project](https://img.shields.io/badge/Support-Project-black?style=flat&labelColor=100F0F&color=EC8B49&logo=ko-fi&logoColor=FFFCF0)](https://ko-fi.com/G2G41SAWNS)
 
 > [!IMPORTANT]
 > 🏖️ I'm on vacation from 18 Jun to 28 Jun. All issues and PRs will continue being reviewed after that. Thanks for the patience.
 
-## **OpenCode, everywhere.** Desktop. Browser. Phone.
+## **Codex, everywhere.** Desktop. Browser. Phone.
 
-### A rich interface for [OpenCode](https://opencode.ai). Review diffs, manage agents, run dev servers, and keep the big picture while your AI codes.
+### A rich interface for Codex. Review diffs, manage agents, run dev servers, and keep the big picture while your AI codes.
 
 ![OpenChamber Chat](docs/references/chat_example.png)
 
@@ -33,7 +33,7 @@
 ## Why use OpenChamber?
 
 - **Cross-device continuity**: Start in TUI, continue on tablet/phone, return to terminal - same session
-- **Remote access**: Use OpenCode from anywhere via browser
+- **Remote access**: Use Codex from anywhere via browser
 - **Familiarity**: A visual alternative for developers who prefer GUI workflows
 
 ## Features
@@ -89,7 +89,7 @@
 
 ## Quick Start
 
-> **Prerequisite:** [OpenCode CLI](https://opencode.ai) installed.
+> **Prerequisite:** [Codex CLI](https://openai.com/codex) installed.
 
 ### **Desktop (macOS + Windows)**
 Download from [Releases](https://github.com/btriapitsyn/openchamber/releases).
@@ -128,23 +128,18 @@ openchamber connect-url --port 3000  # Add this server to OpenChamber Desktop
 openchamber connect-url --server http://host:3000 --qr
 openchamber connect-url --port 3000 --qr
 openchamber logs                     # Follow latest instance logs
-OPENCODE_PORT=4096 OPENCODE_SKIP_START=true openchamber                    # Connect to external OpenCode server
-OPENCODE_HOST=https://myhost:4096 OPENCODE_SKIP_START=true openchamber  # Connect via custom host/HTTPS
+CODEX_HOME=~/.codex openchamber      # Use a specific Codex home directory
+OPENCHAMBER_CODEX_BINARY=/path/to/codex openchamber  # Use a specific Codex CLI binary
 openchamber stop                     # Stop server
 openchamber update                   # Update to latest
 ```
 
 `startup enable` snapshots your current environment into the native service so startup behaves like you launched `openchamber` from the same shell. This preserves provider tokens, PATH, SSH agent settings, and other CLI auth/config env vars. Use `--no-env-snapshot` if you want a minimal service env.
 
-Connect to an existing OpenCode server:
+Use a specific Codex installation:
 ```bash
-OPENCODE_PORT=4096 OPENCODE_SKIP_START=true openchamber
-OPENCODE_HOST=https://myhost:4096 OPENCODE_SKIP_START=true openchamber
-```
-
-Bind managed OpenCode server to all interfaces (use only on trusted networks):
-```bash
-OPENCHAMBER_OPENCODE_HOSTNAME=0.0.0.0 openchamber --port 3000
+CODEX_HOME=~/.codex openchamber
+OPENCHAMBER_CODEX_BINARY=/path/to/codex openchamber
 ```
 
 Expose OpenChamber itself on your LAN:
@@ -175,22 +170,30 @@ Paste the printed `openchamber://connect?...` link in Desktop under Settings -> 
 <details>
 <summary>systemd service (VPN / LAN access)</summary>
 
-Run OpenChamber and OpenCode as separate persistent services — useful when you want to access your
-dev machine over a VPN (e.g. Tailscale) or LAN without a Cloudflare tunnel.
+Run OpenChamber as a persistent service — useful when you want to access your dev machine over a
+VPN (e.g. Tailscale) or LAN without a Cloudflare tunnel.
 
 **How it works:**
-- OpenCode runs as its own service, binding only to `localhost`.
-- OpenChamber connects to it via `OPENCODE_HOST` and `--lan` makes it reachable on your VPN IP.
+- OpenChamber starts and manages Codex through the Codex CLI available on `PATH`.
+- `--lan` makes OpenChamber reachable on your VPN IP.
 - `--foreground` keeps the CLI process alive so systemd can track and restart it.
 
-**`~/.config/systemd/user/opencode.service`**
+> **Why set `PATH` and `SSH_AUTH_SOCK`?**
+> systemd user services start with a minimal environment — no shell profile is sourced.
+> Without an explicit `PATH`, Codex won't find tools installed via Homebrew, npm, or `~/.local/bin`.
+> Without `SSH_AUTH_SOCK`, git operations over SSH (push, pull, clone) will fail because the agent socket isn't inherited.
+> Adjust the `PATH` to match your own tool installation paths.
+> `%t` expands to `$XDG_RUNTIME_DIR` (e.g. `/run/user/1000`), where most SSH agents write their socket.
+
+**`~/.config/systemd/user/openchamber.service`**
 ```ini
 [Unit]
-Description=OpenCode Server
+Description=OpenChamber Web Server
 
 [Service]
 Type=simple
-ExecStart=opencode serve --port 4095
+ExecStart=openchamber serve --port 3000 --host 0.0.0.0 --ui-password your-password --foreground
+Environment=CODEX_HOME=%h/.codex
 Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/YOU/.local/bin:/home/YOU/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=SSH_AUTH_SOCK=%t/ssh-agent.socket
 Restart=on-failure
@@ -200,34 +203,9 @@ RestartSec=5
 WantedBy=default.target
 ```
 
-> **Why set `PATH` and `SSH_AUTH_SOCK`?**
-> systemd user services start with a minimal environment — no shell profile is sourced.
-> Without an explicit `PATH`, OpenCode won't find tools installed via Homebrew, npm, or `~/.local/bin`.
-> Without `SSH_AUTH_SOCK`, git operations over SSH (push, pull, clone) will fail because the agent socket isn't inherited.
-> Adjust the `PATH` to match your own tool installation paths.
-> `%t` expands to `$XDG_RUNTIME_DIR` (e.g. `/run/user/1000`), where most SSH agents write their socket.
-
-**`~/.config/systemd/user/openchamber.service`**
-```ini
-[Unit]
-Description=OpenChamber Web Server
-After=opencode.service
-
-[Service]
-Type=simple
-ExecStart=openchamber serve --port 3000 --host 0.0.0.0 --ui-password your-password --foreground
-Environment="OPENCODE_HOST=http://localhost:4095"
-Environment="OPENCODE_SKIP_START=true"
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-```
-
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now opencode openchamber
+systemctl --user enable --now openchamber
 ```
 
 OpenChamber will be reachable at `http://<your-vpn-hostname>:3000` from any device on your VPN.
@@ -294,7 +272,7 @@ Managed-local path note: `OPENCHAMBER_TUNNEL_CONFIG` must point to a path inside
 **Data Directory Permission Note:** The `data/` directory is mounted into the container for persistent storage (config, sessions, SSH keys, workspaces). Before running, ensure the directory exists and has proper permissions:
 
 ```bash
-mkdir -p data/openchamber data/opencode/share data/opencode/config data/ssh
+mkdir -p data/openchamber data/codex data/ssh
 chown -R 1000:1000 data/
 ```
 
@@ -413,17 +391,17 @@ Active development. Here's what's being worked on or planned:
 - Mobile app with remote instance and laptop connectivity
 - More built-in tunneling options
 - Kanban board for multi-agent management - keeping the human in the loop and in control
-- Custom OpenCode plugins/tools built-in catalog
+- Custom Codex plugins/tools built-in catalog
 - Linear integration
 - Built-in browser for running dev apps with agent integration
 
 ## Acknowledgments
 
-Independent project, not affiliated with the OpenCode team.
+Independent project, not affiliated with OpenAI.
 
 **Special thanks to:**
 
-- [OpenCode](https://opencode.ai) - For the excellent API and extensible architecture.
+- [Codex](https://openai.com/codex) - For the agent runtime this project builds around.
 - [Flexoki](https://github.com/kepano/flexoki) - Beautiful color scheme by [Steph Ango](https://stephango.com/flexoki).
 - [Pierre](https://pierrejs-docs.vercel.app/) - Fast, beautiful diff viewer with syntax highlighting.
 - [Ghostty-web](https://github.com/coder/ghostty-web) - Great implementation of a Ghostty web renderer.

@@ -60,7 +60,7 @@ export function useRouter(): void {
         if (route.sessionId) {
           const currentSessionId = useSessionUIStore.getState().currentSessionId;
           if (route.sessionId !== currentSessionId) {
-            await setCurrentSession(route.sessionId);
+            await setCurrentSession(route.sessionId, route.directory);
           }
         }
 

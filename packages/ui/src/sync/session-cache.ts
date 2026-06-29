@@ -5,7 +5,7 @@ import type {
   QuestionRequest,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/lib/codex/types"
 import type { FileDiff } from "./types"
 
 type SessionCache = {

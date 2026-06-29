@@ -1,0 +1,33 @@
+---
+title: Codex Connection
+description: Fix OpenChamber not connecting to its Codex runtime.
+---
+
+# Codex Connection
+
+If OpenChamber loads but never gets past "Codex is restarting," or chat won't respond, the Codex runtime is not ready. Work through these.
+
+## It's stuck on "Codex is restarting"
+
+- give it a moment right after launch — this state is normal while the runtime starts
+- check whether OpenChamber is alive with `openchamber status`
+- restart it with `openchamber restart`
+- view startup details with `openchamber logs`
+
+## You're using a custom Codex installation
+
+If you set `CODEX_HOME`, `CODEX_BINARY`, or `OPENCHAMBER_CODEX_BINARY`, double-check the setup from [Codex Runtime](/codex-server/):
+
+- confirm the binary path exists and runs `codex --version`
+- confirm `CODEX_HOME` points to the Codex home directory you expect
+
+## Still failing
+
+- confirm Node.js is version `20` or newer
+- reinstall the latest CLI
+- open `http://localhost:3000` directly before testing any tunnel or remote link
+
+## Related
+
+- [Codex Runtime](/codex-server/) — how OpenChamber finds and manages Codex
+- [Troubleshooting](/troubleshooting/) — other common issues

@@ -2,12 +2,16 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const OPENCODE_CONFIG_DIR = path.join(os.homedir(), '.config', 'opencode');
-const OPENCODE_DATA_DIR = path.join(os.homedir(), '.local', 'share', 'opencode');
+const CODEX_HOME = process.env.CODEX_HOME
+  ? path.resolve(process.env.CODEX_HOME)
+  : path.join(os.homedir(), '.codex');
+const OPENCHAMBER_DATA_DIR = process.env.OPENCHAMBER_DATA_DIR
+  ? path.resolve(process.env.OPENCHAMBER_DATA_DIR)
+  : path.join(os.homedir(), '.config', 'openchamber');
 
 export const ANTIGRAVITY_ACCOUNTS_PATHS = [
-  path.join(OPENCODE_CONFIG_DIR, 'antigravity-accounts.json'),
-  path.join(OPENCODE_DATA_DIR, 'antigravity-accounts.json')
+  path.join(CODEX_HOME, 'antigravity-accounts.json'),
+  path.join(OPENCHAMBER_DATA_DIR, 'antigravity-accounts.json')
 ];
 
 export const readJsonFile = (filePath) => {

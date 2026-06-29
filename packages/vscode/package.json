@@ -28,7 +28,7 @@
     "chatgpt",
     "groq",
     "assistant",
-    "opencode",
+    "codex",
     "openchamber"
   ],
   "icon": "assets/app-icon.png",
@@ -77,11 +77,6 @@
         "command": "openchamber.restartApi",
         "category": "OpenChamber",
         "title": "%command.restartApi.title%"
-      },
-      {
-        "command": "openchamber.showOpenCodeStatus",
-        "category": "OpenChamber",
-        "title": "%command.showOpenCodeStatus.title%"
       },
       {
         "command": "openchamber.openAgentManager",
@@ -210,11 +205,6 @@
           "type": "string",
           "default": "",
           "description": "%configuration.apiUrl.description%"
-        },
-        "openchamber.opencodeBinary": {
-          "type": "string",
-          "default": "",
-          "description": "%configuration.opencodeBinary.description%"
         }
       }
     }
@@ -223,7 +213,7 @@
     "vscode:prepublish": "bun run build",
     "build": "bun run build:extension && bun run build:webview",
     "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --main-fields=module,main",
-    "build:webview": "VITE_OPENCODE_URL=/api vite build",
+    "build:webview": "VITE_OPENCHAMBER_API_URL=/api vite build",
     "dev": "concurrently -n \"ext,web\" -c \"cyan,magenta\" \"bun run watch:extension\" \"bun run dev:webview\"",
     "dev:webview": "vite --host localhost --port 5173 --strictPort",
     "watch:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch --sourcemap --main-fields=module,main",
@@ -244,7 +234,6 @@
   },
   "dependencies": {
     "@openchamber/ui": "workspace:*",
-    "@opencode-ai/sdk": "^1.17.9",
     "adm-zip": "^0.5.16",
     "jsonc-parser": "^3.3.1",
     "react": "^19.1.1",

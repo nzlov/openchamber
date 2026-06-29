@@ -1,6 +1,6 @@
 ---
 title: Environment Variables
-description: Configure OpenChamber and OpenCode integration with environment variables.
+description: Configure OpenChamber and Codex integration with environment variables.
 ---
 
 # Environment Variables
@@ -45,49 +45,41 @@ Overrides the update-check API endpoint. Most users should leave this unset.
 
 Forces the package manager used by update operations when auto-detection is wrong.
 
-## OpenCode server
+## Codex runtime
 
-### `OPENCODE_HOST`
+### `CODEX_HOME`
 
-Connects OpenChamber to an existing OpenCode server. The value must be an `http` or `https` origin with an explicit port and no path, query, or hash. `OPENCODE_HOST` takes precedence over `OPENCODE_PORT`.
+Path to the Codex home directory. OpenChamber uses `~/.codex` when this is not set.
 
-### `OPENCODE_PORT`
+### `OPENCHAMBER_CODEX_BINARY`
 
-Sets the OpenCode server port. With managed OpenCode this requests the managed port; with `OPENCODE_SKIP_START=true` it connects to an external server on that port.
+Path to the `codex` executable OpenChamber should run. This takes precedence over `CODEX_BINARY`.
 
-### `OPENCODE_SKIP_START`
+### `CODEX_BINARY`
 
-Prevents OpenChamber from starting its own OpenCode server when set to `true`.
+Path to the `codex` executable OpenChamber should run.
 
-### `OPENCHAMBER_OPENCODE_HOSTNAME`
+### `CODEX_CONFIG`
 
-Bind hostname for the OpenCode server managed by OpenChamber. The default is `127.0.0.1`.
+Path to a specific Codex config file.
 
-### `OPENCODE_BINARY`
+### `CODEX_CONFIG_DIR`
 
-Path to the `opencode` executable OpenChamber should run.
+Path to a specific Codex config directory for agents, skills, snippets, and config discovery.
 
-### `OPENCODE_CONFIG`
+### `CODEX_DATA_DIR`
 
-Path to a specific OpenCode config file.
+Custom data directory for the managed Codex runtime.
 
-### `OPENCODE_CONFIG_DIR`
+### `CODEX_WSL_DISTRO`
 
-Path to a specific OpenCode config directory for agents, skills, snippets, and config discovery.
+Selects the WSL distro used for Codex integration on Windows.
 
-### `OPENCODE_DATA_DIR`
+### `OPENCHAMBER_CODEX_WSL_DISTRO`
 
-Custom data directory for the managed OpenCode server.
+OpenChamber-specific alias for selecting the WSL distro. `CODEX_WSL_DISTRO` takes precedence when both are set.
 
-### `OPENCODE_WSL_DISTRO`
-
-Selects the WSL distro used for OpenCode integration on Windows.
-
-### `OPENCHAMBER_OPENCODE_WSL_DISTRO`
-
-OpenChamber-specific alias for selecting the WSL distro. `OPENCODE_WSL_DISTRO` takes precedence when both are set.
-
-### `OPENCODE_JWT_SECRET`
+### `CODEX_JWT_SECRET`
 
 Secret used to sign UI authentication tokens. Use a long random value for persistent service deployments.
 
@@ -133,6 +125,6 @@ Bun executable OpenChamber should use when spawning daemon processes.
 
 Bun installation root. OpenChamber uses it to find `bin/bun` for daemon startup and updates.
 
-### `VITE_OPENCODE_URL`
+### `VITE_CODEX_URL`
 
 Build-time API base URL for the Vite-built web app. Most users should not set it for normal CLI or desktop usage.

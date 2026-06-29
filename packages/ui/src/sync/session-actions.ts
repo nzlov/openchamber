@@ -3,14 +3,14 @@
  * Replaces the action methods from the old useSessionStore.
  */
 
-import type { OpencodeClient, Session, Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { CodexRuntimeSdkClient, Session, Message, Part } from "@/lib/codex/types"
 import { Binary } from "./binary"
 import { useSessionUIStore } from "./session-ui-store"
 import { useInputStore } from "./input-store"
 import type { ChildStoreManager } from "./child-store"
 import { computeSubtreeIds } from "./scoped-blocking-requests"
-import { opencodeClient } from "@/lib/opencode/client"
-import { mergeSessionDirectoryMetadata, useGlobalSessionsStore } from "@/stores/useGlobalSessionsStore"
+import { codexRuntimeClient } from "@/lib/codex/runtime-client"
+import { useGlobalSessionsStore } from "@/stores/useGlobalSessionsStore"
 import { useConfigStore } from "@/stores/useConfigStore"
 import { registerSessionDirectory } from "./sync-refs"
 import { isSyntheticPart } from "@/lib/messages/synthetic"
@@ -18,7 +18,7 @@ import { getSessionMaterializationStatus, materializeSessionSnapshots } from "./
 import { retry } from "./retry"
 import { isVSCodeRuntime } from "@/lib/desktop"
 import { isMobileSurfaceRuntime } from "@/lib/runtimeSurface"
-import { stripMessageDiffSnapshots, stripSessionDiffSnapshots } from "./sanitize"
+import { stripMessageDiffSnapshots } from "./sanitize"
 import { sessionEvents } from "@/lib/sessionEvents"
 import {
   getOriginalSessionID,
@@ -34,7 +34,7 @@ const UNREVERT_REFETCH_ATTEMPTS = 3
 const UNREVERT_REFETCH_RETRY_MS = 150
 
 // Reference set by SyncProvider — allows actions to access SDK and stores
-let _sdk: OpencodeClient | null = null
+let _sdk: CodexRuntimeSdkClient | null = null
 let _childStores: ChildStoreManager | null = null
 let _getDirectory: () => string = () => ""
 type OptimisticAddInput = { sessionID: string; directory?: string | null; message: Message; parts: Part[] }
@@ -88,7 +88,7 @@ function assertSdkData<T>(result: SdkResult<T>, operation: string): T {
 }
 
 export function setActionRefs(
-  sdk: OpencodeClient,
+  sdk: CodexRuntimeSdkClient,
   childStores: ChildStoreManager,
   getDirectory: () => string,
 ) {
@@ -129,27 +129,6 @@ function dirStoreForSession(sessionId: string): { store: DirectoryStoreApi; dire
     return { store: dirStoreForDirectory(directory), directory }
   }
   return { store: dirStore(), directory: dir() }
-}
-
-function updateLiveSession(session: Session, directory?: string): void {
-  const stores = _childStores
-  if (!stores) return
-
-  const candidates = directory
-    ? [[directory, stores.getChild(directory)] as const]
-    : stores.children
-
-  for (const [, store] of candidates) {
-    if (!store) continue
-    const current = store.getState().session
-    const index = current.findIndex((item) => item.id === session.id)
-    if (index === -1) continue
-
-    const next = [...current]
-    next[index] = mergeSessionDirectoryMetadata(session, current[index])
-    store.setState({ session: next })
-    return
-  }
 }
 
 function dir() {
@@ -230,12 +209,12 @@ function findSessionDirectoryInChildStores(sessionId: string): string | null {
   return null
 }
 
-function getSessionReplyClient(sessionId?: string): OpencodeClient {
+function getSessionReplyClient(sessionId?: string): CodexRuntimeSdkClient {
   const directory = sessionId
     ? useSessionUIStore.getState().getDirectoryForSession(sessionId)
     : null
   if (directory) {
-    return opencodeClient.getScopedSdkClient(directory)
+    return codexRuntimeClient.getScopedSdkClient(directory)
   }
   return sdk()
 }
@@ -347,10 +326,10 @@ function getRequestReplyClient(
   type: "permission" | "question",
   sessionId: string,
   requestId: string,
-): OpencodeClient {
+): CodexRuntimeSdkClient {
   const requestDirectory = resolveDirectoryForBlockingRequest(type, sessionId, requestId)
   if (requestDirectory) {
-    return opencodeClient.getScopedSdkClient(requestDirectory)
+    return codexRuntimeClient.getScopedSdkClient(requestDirectory)
   }
   return getSessionReplyClient(sessionId)
 }
@@ -366,7 +345,7 @@ export async function createSession(
   metadata?: Record<string, unknown>,
 ): Promise<Session | null> {
   try {
-    const session = await opencodeClient.createSession({
+    const session = await codexRuntimeClient.createSession({
       title,
       parentID: parentID ?? undefined,
       metadata,
@@ -394,9 +373,9 @@ export async function patchSessionMetadata(
   updater: (metadata: SessionMetadataRecord) => SessionMetadataRecord,
 ): Promise<Session> {
   const targetDirectory = directory ?? getSessionDirectory(sessionId)
-  const current = await opencodeClient.getSession(sessionId, targetDirectory)
+  const current = await codexRuntimeClient.getSession(sessionId, targetDirectory)
   const nextMetadata = updater(getSessionMetadata(current))
-  const updated = await opencodeClient.updateSession(sessionId, { metadata: nextMetadata }, targetDirectory)
+  const updated = await codexRuntimeClient.updateSession(sessionId, { metadata: nextMetadata }, targetDirectory)
   useGlobalSessionsStore.getState().upsertSession(updated)
   const sessionDirectory = (updated as { directory?: string | null }).directory ?? targetDirectory
   if (sessionDirectory) registerSessionDirectory(updated.id, sessionDirectory)
@@ -406,7 +385,7 @@ export async function patchSessionMetadata(
 async function cleanupReviewMetadataBeforeDelete(sessionId: string, directory?: string | null): Promise<void> {
   let session: Session
   try {
-    session = await opencodeClient.getSession(sessionId, directory ?? getSessionDirectory(sessionId))
+    session = await codexRuntimeClient.getSession(sessionId, directory ?? getSessionDirectory(sessionId))
   } catch {
     return
   }
@@ -483,7 +462,7 @@ export async function deleteSession(sessionId: string, _options?: Record<string,
   }
   try {
     await cleanupReviewMetadataBeforeDelete(sessionId, sessionDirectory)
-    const deleted = await opencodeClient.deleteSession(sessionId, sessionDirectory)
+    const deleted = await codexRuntimeClient.deleteSession(sessionId, sessionDirectory)
     if (deleted !== true) {
       throw new Error("session.delete failed: server did not confirm deletion")
     }
@@ -515,7 +494,7 @@ export async function deleteSessionInDirectory(sessionId: string, directory: str
   if (ui.currentSessionId === sessionId) ui.setCurrentSession(null)
   try {
     await cleanupReviewMetadataBeforeDelete(sessionId, directory)
-    const deleted = await opencodeClient.deleteSession(sessionId, directory)
+    const deleted = await codexRuntimeClient.deleteSession(sessionId, directory)
     if (deleted !== true) {
       throw new Error("session.delete failed: server did not confirm deletion")
     }
@@ -546,7 +525,7 @@ export async function archiveSession(sessionId: string): Promise<boolean> {
   }
   try {
     await cleanupReviewMetadataBeforeDelete(sessionId, sessionDirectory)
-    const archived = await opencodeClient.updateSession(sessionId, { time: { archived: archivedAt } }, sessionDirectory)
+    const archived = await codexRuntimeClient.updateSession(sessionId, { time: { archived: archivedAt } }, sessionDirectory)
     if (!archived) {
       throw new Error("session.update failed: server did not return the archived session")
     }
@@ -562,33 +541,25 @@ export async function archiveSession(sessionId: string): Promise<boolean> {
 
 export async function updateSessionTitle(sessionId: string, title: string): Promise<void> {
   const sessionDirectory = getSessionDirectory(sessionId)
-  const session = await opencodeClient.updateSession(sessionId, { title }, sessionDirectory)
+  const session = await codexRuntimeClient.updateSession(sessionId, { title }, sessionDirectory)
   useGlobalSessionsStore.getState().upsertSession(session)
 }
 
 export async function shareSession(sessionId: string): Promise<Session | null> {
-  const sessionDirectory = getSessionDirectory(sessionId)
-  const result = await sdk().session.share({ sessionID: sessionId, directory: sessionDirectory })
-  const session = stripSessionDiffSnapshots(assertSdkData(result, "session.share"))
-  useGlobalSessionsStore.getState().upsertSession(session)
-  updateLiveSession(session, sessionDirectory)
-  return session
+  void sessionId
+  return null
 }
 
 export async function unshareSession(sessionId: string): Promise<Session | null> {
-  const sessionDirectory = getSessionDirectory(sessionId)
-  const result = await sdk().session.unshare({ sessionID: sessionId, directory: sessionDirectory })
-  const session = stripSessionDiffSnapshots(assertSdkData(result, "session.unshare"))
-  useGlobalSessionsStore.getState().upsertSession(session)
-  updateLiveSession(session, sessionDirectory)
-  return session
+  void sessionId
+  return null
 }
 
 // ---------------------------------------------------------------------------
 // Optimistic message send — insert user message before API call, rollback on error
 // ---------------------------------------------------------------------------
 
-// ID generator matching OpenCode's Identifier.ascending format.
+// ID generator matching Codex's Identifier.ascending format.
 // Uses BigInt(timestamp) * 0x1000 + counter, encoded as 6 hex bytes + random base62.
 // This ensures client-generated IDs sort correctly with server-generated ones.
 let lastIdTimestamp = 0
@@ -847,7 +818,7 @@ export async function rejectQuestion(
  *
  * NOTE: rejecting unblocks the agent's tool but does NOT end its turn. Callers
  * that need to send the next message right away (the chat send path) must also
- * abort the session so the OpenCode runner reaches `idle` — otherwise the new
+ * abort the session so the Codex runner reaches `idle` — otherwise the new
  * prompt arrives while the run is still active and is discarded by the runner's
  * `ensureRunning`.
  */
@@ -981,7 +952,7 @@ export async function revertToMessage(sessionId: string, messageId: string): Pro
 
   // Call SDK and merge authoritative result into store
   try {
-    const revertedSession = await opencodeClient.revertSession(sessionId, messageId, undefined, directory)
+    const revertedSession = await codexRuntimeClient.revertSession(sessionId, messageId, undefined, directory)
     const current = store.getState()
     const updated = [...current.session]
     const idx = updated.findIndex((s) => s.id === sessionId)
@@ -1053,8 +1024,7 @@ export async function unrevertSession(sessionId: string): Promise<void> {
     }
   }
 
-  const result = await sdk().session.unrevert({ sessionID: sessionId, directory })
-  const unrevertedSession = assertSdkData(result, "session.unrevert")
+  const unrevertedSession = await codexRuntimeClient.unrevertSession(sessionId, directory)
   const current = store.getState()
   const sessions = [...current.session]
   const idx = sessions.findIndex((s) => s.id === sessionId)
@@ -1095,7 +1065,7 @@ export async function forkFromMessage(sessionId: string, messageId: string): Pro
     .trim()
   const fileParts = parts.filter((p) => p.type === "file" && !isSyntheticPart(p)) as Array<Record<string, unknown>>
 
-  const forkedSession = await opencodeClient.forkSession(sessionId, messageId, directory)
+  const forkedSession = await codexRuntimeClient.forkSession(sessionId, messageId, directory)
 
   // Insert new session into child store so sidebar updates immediately
   const current = store.getState()
@@ -1162,7 +1132,6 @@ export async function fetchMessagesForSession(sessionID: string, directory?: str
 
     const records = (assertSdkSuccess(result, "session.messages") ?? [])
       .filter((record: { info?: { id?: string } }) => !!record?.info?.id)
-    if (records.length === 0) return
 
     // Staleness guard: a rapid session switch may have moved the user off this
     // session while the fetch was in flight. Skip the write so a slow fetch

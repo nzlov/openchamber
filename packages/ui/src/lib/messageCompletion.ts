@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Part } from "@opencode-ai/sdk/v2";
+import type { Part } from "@/lib/codex/types";
 
 interface MessageInfo {
     id: string;
-    role: string;
+    role?: string;
     time?: {
         created?: number;
         completed?: number;

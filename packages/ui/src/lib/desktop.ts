@@ -48,8 +48,6 @@ export type DesktopSettings = {
   splashFgDark?: string;
   lastDirectory?: string;
   homeDirectory?: string;
-  // Optional absolute path to `opencode` binary.
-  opencodeBinary?: string;
   desktopLanAccessEnabled?: boolean;
   desktopUiPassword?: string;
   projects?: ProjectEntry[];
@@ -126,8 +124,6 @@ export type DesktopSettings = {
   pwaOrientation?: 'system' | 'portrait' | 'landscape';
   mobileKeyboardMode?: MobileKeyboardMode;
   inputSpellcheckEnabled?: boolean;
-  showOpenCodeUpdateNotifications?: boolean;
-  openCodeUpdateToastDismissedVersion?: string;
   showToolFileIcons?: boolean;
   showTurnChangedFiles?: boolean;
   showExpandedBashTools?: boolean;
@@ -172,7 +168,7 @@ export type DesktopSettings = {
   // Opt-in to send anonymous usage reports for update checks (default: true)
   reportUsage?: boolean;
 
-  // Global behavior prompt — synced to ~/.config/opencode/AGENTS.md
+  // Global behavior prompt synced to ~/.codex/AGENTS.md.
   globalBehaviorPrompt?: string;
   responseStyleEnabled?: boolean;
   responseStylePreset?: 'concise' | 'detailed' | 'mentor' | 'pushback' | 'noFiller' | 'matchEnergy' | 'warmPeer' | 'custom';
@@ -819,4 +815,3 @@ export const fetchDesktopInstalledApps = async (
     return { apps: [], success: false, hasCache: false, isCacheStale: false };
   }
 };
-

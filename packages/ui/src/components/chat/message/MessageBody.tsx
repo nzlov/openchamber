@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Part } from '@opencode-ai/sdk/v2';
+import type { Part } from '@/lib/codex/types';
 
 import UserTextPart from './parts/UserTextPart';
 import ToolPart from './parts/ToolPart';
@@ -7,7 +7,7 @@ import AssistantTextPart from './parts/AssistantTextPart';
 import ReasoningPart, { MergedReasoningPart } from './parts/ReasoningPart';
 import { MessageFilesDisplay } from '../FileAttachment';
 import { TurnChangedFilesDropdown } from '../TurnChangedFilesDropdown';
-import type { ToolPart as ToolPartType } from '@opencode-ai/sdk/v2';
+import type { ToolPart as ToolPartType } from '@/lib/codex/types';
 import type { StreamPhase, ToolPopupContent, AgentMentionInfo } from './types';
 import type { TurnChangedFile, TurnGroupingContext } from '../lib/turns/types';
 import { cn } from '@/lib/utils';

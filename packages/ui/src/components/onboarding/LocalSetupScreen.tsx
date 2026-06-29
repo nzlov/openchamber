@@ -1,16 +1,13 @@
 import React from 'react';
-import { isDesktopShell, requestFileAccess, startDesktopWindowDrag } from '@/lib/desktop';
-import { Input } from '@/components/ui/input';
+import { isDesktopShell, startDesktopWindowDrag } from '@/lib/desktop';
 import { Button } from '@/components/ui/button';
 import { Icon } from "@/components/icon/Icon";
-import { updateDesktopSettings } from '@/lib/persistence';
 import { copyTextToClipboard } from '@/lib/clipboard';
-import { restartDesktopApp } from '@/lib/desktop';
 import { useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
-const INSTALL_COMMAND = 'curl -fsSL https://opencode.ai/install | bash';
-const DOCS_URL = 'https://opencode.ai/docs';
+const INSTALL_COMMAND = 'npm install -g @openai/codex';
+const DOCS_URL = 'https://developers.openai.com/codex';
 
 type OnboardingPlatform = 'macos' | 'linux' | 'windows' | 'unknown';
 
@@ -29,11 +26,9 @@ function BashCommand({ onCopy, copyTitle }: { onCopy: () => void; copyTitle: str
   return (
     <div className="flex items-center justify-center gap-3">
       <code>
-        <span style={{ color: 'var(--syntax-keyword)' }}>curl</span>
-        <span className="text-muted-foreground"> -fsSL </span>
-        <span style={{ color: 'var(--syntax-string)' }}>https://opencode.ai/install</span>
-        <span className="text-muted-foreground"> | </span>
-        <span style={{ color: 'var(--syntax-keyword)' }}>bash</span>
+        <span style={{ color: 'var(--syntax-keyword)' }}>npm</span>
+        <span className="text-muted-foreground"> install -g </span>
+        <span style={{ color: 'var(--syntax-string)' }}>@openai/codex</span>
       </code>
       <button
         onClick={onCopy}
@@ -58,10 +53,8 @@ export function LocalSetupScreen({
   const [copied, setCopied] = React.useState(false);
   const [showHint, setShowHint] = React.useState(false);
   const [isDesktopApp, setIsDesktopApp] = React.useState(false);
-  const [isRetrying, setIsRetrying] = React.useState(false);
   const [isChecking, setIsChecking] = React.useState(false);
   const [checkError, setCheckError] = React.useState<string | null>(null);
-  const [opencodeBinary, setOpencodeBinary] = React.useState('');
   const [platform, setPlatform] = React.useState<OnboardingPlatform>('unknown');
 
   React.useEffect(() => {
@@ -95,27 +88,6 @@ export function LocalSetupScreen({
     setPlatform('unknown');
   }, []);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await runtimeFetch('/api/config/settings', { method: 'GET', headers: { Accept: 'application/json' } });
-        if (!response.ok) return;
-        const data = (await response.json().catch(() => null)) as null | { opencodeBinary?: unknown };
-        if (!data || cancelled) return;
-        const value = typeof data.opencodeBinary === 'string' ? data.opencodeBinary.trim() : '';
-        if (value) {
-          setOpencodeBinary(value);
-        }
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const handleDragStart = React.useCallback(async (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button, a, input, select, textarea, code')) {
       return;
@@ -131,47 +103,14 @@ export function LocalSetupScreen({
       const response = await runtimeFetch('/health');
       if (!response.ok) return false;
       const data = await response.json();
-      return data.openCodeRunning === true || data.isOpenCodeReady === true;
+      return data.codexReady === true
+        || data.codexRunning === true
+        || data.codex?.running === true
+        || data.codex?.initialized === true;
     } catch {
       return false;
     }
   }, []);
-
-  const handleBrowse = React.useCallback(async () => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    if (!isDesktopApp) {
-      return;
-    }
-
-    try {
-      const selected = await requestFileAccess();
-      if (selected.success && selected.path && selected.path.trim().length > 0) {
-        setOpencodeBinary(selected.path.trim());
-      }
-    } catch {
-      // ignore
-    }
-  }, [isDesktopApp]);
-
-  const handleApplyPath = React.useCallback(async () => {
-    setIsRetrying(true);
-    try {
-      await updateDesktopSettings({ opencodeBinary: opencodeBinary.trim() });
-
-      // In desktop boot flow, restart the app so the native host can
-      // re-evaluate the boot outcome with the updated binary path.
-      if (isDesktopApp) {
-        await restartDesktopApp();
-        return;
-      }
-
-      await runtimeFetch('/api/config/reload', { method: 'POST' });
-    } finally {
-      setTimeout(() => setIsRetrying(false), 1000);
-    }
-  }, [isDesktopApp, opencodeBinary]);
 
   const handleCopy = React.useCallback(async () => {
     const result = await copyTextToClipboard(INSTALL_COMMAND);
@@ -202,13 +141,6 @@ export function LocalSetupScreen({
   }, [checkCliAvailability, onCliAvailable, t]);
 
   const docsUrl = DOCS_URL;
-  const binaryPlaceholder =
-    platform === 'windows'
-      ? 'C:\\Users\\you\\AppData\\Roaming\\npm\\opencode.cmd'
-      : platform === 'linux'
-        ? '/home/you/.bun/bin/opencode'
-        : '/Users/you/.bun/bin/opencode';
-
   return (
     <div
       className="h-full flex items-center justify-center bg-transparent p-8 relative cursor-default select-none"
@@ -287,37 +219,6 @@ export function LocalSetupScreen({
           <p className="text-xs text-muted-foreground">
             {t('onboarding.localSetup.helper.checkAndContinue')}
           </p>
-        </div>
-
-        <div className="mx-auto w-full max-w-xl pt-4">
-          <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">{t('onboarding.localSetup.field.alreadyInstalled')}</div>
-            <div className="flex gap-2">
-              <Input
-                value={opencodeBinary}
-                onChange={(e) => setOpencodeBinary(e.target.value)}
-                placeholder={binaryPlaceholder}
-                disabled={isRetrying}
-                className="flex-1 font-mono text-xs"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleBrowse}
-                disabled={isRetrying || !isDesktopApp}
-              >
-                {t('onboarding.localSetup.actions.browse')}
-              </Button>
-              <Button
-                type="button"
-                onClick={handleApplyPath}
-                disabled={isRetrying}
-              >
-                {t('onboarding.localSetup.actions.apply')}
-              </Button>
-            </div>
-            <div className="text-xs text-muted-foreground/70">{t('onboarding.localSetup.helper.saveAndReload')}</div>
-          </div>
         </div>
 
         {isFromRecovery && onSwitchToRemote && (

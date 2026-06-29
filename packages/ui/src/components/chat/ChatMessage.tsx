@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Message, Part } from '@opencode-ai/sdk/v2';
+import type { Message, Part } from '@/lib/codex/types';
 import { useShallow } from 'zustand/react/shallow';
 
 import { MessageFreshnessDetector } from '@/lib/messageFreshness';
@@ -679,7 +679,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
         }
         if (detail.trim().toLowerCase() === 'aborted') {
             return {
-                text: 'The running turn was stopped before OpenCode could send the next message.',
+                text: 'The running turn was stopped before Codex could send the next message.',
                 variant: 'info' as const,
             };
         }

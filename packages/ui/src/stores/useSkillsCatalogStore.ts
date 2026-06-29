@@ -13,8 +13,8 @@ import type {
   SkillsCatalogSourceResponse,
 } from '@/lib/api/types';
 
-import { invalidateSkillsLoadCache, refreshSkillsAfterOpenCodeRestart, useSkillsStore } from '@/stores/useSkillsStore';
-import { opencodeClient } from '@/lib/opencode/client';
+import { invalidateSkillsLoadCache, refreshSkillsAfterCodexRestart, useSkillsStore } from '@/stores/useSkillsStore';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { startConfigUpdate, finishConfigUpdate, updateConfigUpdateMessage } from '@/lib/configUpdate';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
@@ -46,9 +46,9 @@ const getSkillsCatalogCacheKey = (directory: string | null): string => {
 };
 
 const getCurrentDirectory = (): string | null => {
-  const opencodeDirectory = opencodeClient.getDirectory();
-  if (typeof opencodeDirectory === 'string' && opencodeDirectory.trim().length > 0) {
-    return opencodeDirectory;
+  const codexDirectory = codexRuntimeClient.getDirectory();
+  if (typeof codexDirectory === 'string' && codexDirectory.trim().length > 0) {
+    return codexDirectory;
   }
 
   try {
@@ -417,7 +417,7 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
 
           if (payload.requiresReload) {
             requiresReload = true;
-            await refreshSkillsAfterOpenCodeRestart({
+            await refreshSkillsAfterCodexRestart({
               message: payload.message,
               delayMs: payload.reloadDelayMs,
             });

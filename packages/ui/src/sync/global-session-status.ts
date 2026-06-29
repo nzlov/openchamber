@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Event } from '@opencode-ai/sdk/v2/client';
+import type { Event } from '@/lib/codex/types';
 import { normalizeProjectPath } from '@/lib/projectResolution';
 
 // Live busy/retry status for sessions in directories WITHOUT a synced child

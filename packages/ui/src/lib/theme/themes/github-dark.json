@@ -2,13 +2,13 @@
   "metadata": {
     "id": "github-dark",
     "name": "GitHub",
-    "description": "Ported from OpenCode GitHub theme (dark variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex GitHub theme (dark variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "dark",
     "tags": [
       "dark",
-      "opencode",
+      "codex",
       "ported",
       "github"
     ]

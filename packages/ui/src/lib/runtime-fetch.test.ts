@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { buildRuntimeFetchUrl, isLatin1Safe, runtimeFetch, sanitizeHeadersForBrowser } from './runtime-fetch';
 import { clearRuntimeAuthCredentialProvider, setRuntimeBearerToken } from './runtime-auth';
 import { configureRuntimeUrlResolver, getRuntimeUrlResolver, setRuntimeUrlResolver } from './runtime-url';
@@ -49,7 +48,7 @@ describe('buildRuntimeFetchUrl', () => {
 });
 
 describe('runtimeFetch transport contract', () => {
-  test('preserves bodies from actual SDK mutation requests on same-origin runtimes', async () => {
+  test('preserves bodies from SDK-style mutation requests on same-origin runtimes', async () => {
     const previous = getRuntimeUrlResolver();
     const originalWindow = globalThis.window;
     const calls: Array<{ url: string; method: string; body: string; headers: Headers }> = [];
@@ -75,25 +74,24 @@ describe('runtimeFetch transport contract', () => {
         });
       }) as typeof fetch;
 
-      const client = createOpencodeClient({
-        baseUrl: 'https://app.example/api',
-        fetch: runtimeFetch,
-      });
+      const sendMutationRequest = (path: string, method: string, body: unknown) => runtimeFetch(new Request(`https://app.example/api${path}`, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }));
 
-      await client.session.revert({ sessionID: 'ses_1', directory: '/repo', messageID: 'msg_1' });
-      await client.session.shell({
-        sessionID: 'ses_1',
-        directory: '/repo',
+      await sendMutationRequest('/session/ses_1/revert?directory=%2Frepo', 'POST', { messageID: 'msg_1' });
+      await sendMutationRequest('/session/ses_1/shell?directory=%2Frepo', 'POST', {
         messageID: 'msg_2',
         agent: 'build',
         model: { providerID: 'anthropic', modelID: 'claude-sonnet' },
         command: 'ls',
       });
-      await client.session.update({ sessionID: 'ses_1', directory: '/repo', time: { archived: 123 } });
-      await client.permission.reply({ requestID: 'perm_1', directory: '/repo', reply: 'once' });
-      await client.question.reply({ requestID: 'q_1', directory: '/repo', answers: [['yes']] });
-      await client.auth.set({ providerID: 'anthropic', auth: { type: 'api', key: 'secret' } });
-      await client.provider.oauth.callback({ providerID: 'github-copilot', method: 0, code: 'oauth-code' });
+      await sendMutationRequest('/session/ses_1?directory=%2Frepo', 'PATCH', { time: { archived: 123 } });
+      await sendMutationRequest('/permission/perm_1/reply?directory=%2Frepo', 'POST', { reply: 'once' });
+      await sendMutationRequest('/question/q_1/reply?directory=%2Frepo', 'POST', { answers: [['yes']] });
+      await sendMutationRequest('/auth/anthropic', 'PUT', { type: 'api', key: 'secret' });
+      await sendMutationRequest('/provider/github-copilot/oauth/callback', 'POST', { method: 0, code: 'oauth-code' });
 
       expect(calls.map((call) => call.url)).toEqual([
         'https://app.example/api/session/ses_1/revert?directory=%2Frepo',
@@ -396,17 +394,17 @@ describe('runtimeFetch header sanitization', () => {
 
   test('sanitizeHeadersForBrowser leaves Latin-1 directory hints unchanged', () => {
     const path = 'C:\\work\\foo%20bar';
-    const result = sanitizeHeadersForBrowser({ 'x-opencode-directory': path });
+    const result = sanitizeHeadersForBrowser({ 'x-openchamber-directory': path });
     expect(result).toBeFalsy();
   });
 
   test('sanitizeHeadersForBrowser encodes non-Latin-1 directory hints with marker', () => {
     const path = 'D:\\文件夹';
-    const result = sanitizeHeadersForBrowser({ 'x-opencode-directory': path });
+    const result = sanitizeHeadersForBrowser({ 'x-openchamber-directory': path });
     expect(result).toBeTruthy();
     const encoded = Object.fromEntries(result!);
-    expect(encoded['x-opencode-directory']).toBe(encodeURIComponent(path));
-    expect(encoded['x-opencode-directory-encoding']).toBe('uri');
+    expect(encoded['x-openchamber-directory']).toBe(encodeURIComponent(path));
+    expect(encoded['x-openchamber-directory-encoding']).toBe('uri');
   });
 
   test('sanitizeHeadersForBrowser returns undefined for empty/undefined input', () => {
@@ -445,15 +443,15 @@ describe('runtimeFetch header sanitization', () => {
       }) as typeof fetch;
 
       await runtimeFetch('/api/config/providers', {
-        headers: { 'x-opencode-directory': 'D:\\文件夹' },
+        headers: { 'x-openchamber-directory': 'D:\\文件夹' },
       });
 
       expect(calls).toHaveLength(1);
-      const encoded = calls[0].headers.get('x-opencode-directory');
+      const encoded = calls[0].headers.get('x-openchamber-directory');
       expect(encoded).not.toBe('D:\\文件夹');
       // decodeURIComponent round-trips back to original
       expect(decodeURIComponent(encoded!)).toBe('D:\\文件夹');
-      expect(calls[0].headers.get('x-opencode-directory-encoding')).toBe('uri');
+      expect(calls[0].headers.get('x-openchamber-directory-encoding')).toBe('uri');
     } finally {
       setRuntimeUrlResolver(previous);
       Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });

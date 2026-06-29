@@ -1049,7 +1049,7 @@ export const McpPage: React.FC = () => {
         }
 
         if (saved.reloadFailed) {
-          throw new Error(saved.warning || saved.message || t('settings.mcp.page.toast.openCodeReloadFailedAfterCallbackSave'));
+          throw new Error(saved.warning || saved.message || t('settings.mcp.page.toast.runtimeReloadFailedAfterCallbackSave'));
         }
 
         if (runtimeActionKeyRef.current !== actionKey) {
@@ -1485,7 +1485,7 @@ export const McpPage: React.FC = () => {
 
               {isAuthPolling && (
                 <p className="mt-4 typography-micro text-muted-foreground">
-                  {t('settings.mcp.page.auth.waitingForOpenCode')}
+                  {t('settings.mcp.page.auth.waitingForCodex')}
                 </p>
               )}
             </div>
@@ -1942,7 +1942,7 @@ export const McpPage: React.FC = () => {
             <DialogTitle>{t('settings.mcp.page.deleteDialog.title', { name: selectedMcpName ?? '' })}</DialogTitle>
             <DialogDescription>
               {t('settings.mcp.page.deleteDialog.descriptionPrefix')}{' '}
-              <code className="text-foreground">opencode.json</code>.
+              <code className="text-foreground">codex.json</code>.
               {' '}
               {t('settings.mcp.page.deleteDialog.descriptionSuffix')}
             </DialogDescription>

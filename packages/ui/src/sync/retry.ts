@@ -15,7 +15,7 @@ const TRANSIENT_MESSAGES = [
   "econnrefused",
   "etimedout",
   "socket hang up",
-  "opencode api unavailable",
+  "codex api unavailable",
   "503",
   "502",
 ]
@@ -25,7 +25,7 @@ function isTransientError(error: unknown): boolean {
   const message = String(error instanceof Error ? error.message : error).toLowerCase()
   if (TRANSIENT_MESSAGES.some((m) => message.includes(m))) return true
   // Any HTTP 5xx is considered transient — server-side issues during warmup
-  // (OpenCode reading sessions from disk, bridge not ready, etc.) are retryable.
+  // (Codex reading sessions from disk, bridge not ready, etc.) are retryable.
   const status = (error as { status?: number })?.status
   if (typeof status === "number" && status >= 500 && status < 600) return true
   return false

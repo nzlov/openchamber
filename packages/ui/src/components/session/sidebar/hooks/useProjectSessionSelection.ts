@@ -1,9 +1,10 @@
 import React from 'react';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import type { SessionGroup, SessionNode } from '../types';
 import { normalizePath } from '../utils';
 import type { MainTab } from '@/stores/useUIStore';
 import { useUIStore } from '@/stores/useUIStore';
+import { hasRouteParams, parseRoute } from '@/lib/router';
 
 type ProjectSection = {
   project: { id: string; normalizedPath: string };
@@ -79,6 +80,11 @@ export const useProjectSessionSelection = (args: Args): void => {
     return { metaByProject, firstSessionByProject };
   }, [projectSections]);
 
+  const pendingInitialRouteSessionRef = React.useRef<string | null | undefined>(undefined);
+  if (pendingInitialRouteSessionRef.current === undefined) {
+    pendingInitialRouteSessionRef.current = hasRouteParams() ? parseRoute().sessionId : null;
+  }
+
   const previousActiveProjectRef = React.useRef<string | null>(null);
 
   React.useLayoutEffect(() => {
@@ -104,6 +110,14 @@ export const useProjectSessionSelection = (args: Args): void => {
     }
     previousActiveProjectRef.current = activeProjectId;
     const projectMap = projectSessionMeta.metaByProject.get(activeProjectId);
+
+    const pendingRouteSessionId = pendingInitialRouteSessionRef.current;
+    if (pendingRouteSessionId && pendingRouteSessionId !== currentSessionId) {
+      return;
+    }
+    if (pendingRouteSessionId && pendingRouteSessionId === currentSessionId) {
+      pendingInitialRouteSessionRef.current = null;
+    }
 
     if (currentSessionId && projectMap && projectMap.has(currentSessionId)) {
       setActiveSessionByProject((prev) => {

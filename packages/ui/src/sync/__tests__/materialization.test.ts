@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@/lib/codex/types"
 import { getSessionMaterializationStatus, materializeSessionSnapshots } from "../materialization"
 
 function message(id: string, sessionID = "ses_1"): Message {

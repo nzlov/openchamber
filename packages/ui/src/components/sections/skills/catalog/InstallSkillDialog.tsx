@@ -42,7 +42,7 @@ export const InstallSkillDialog: React.FC<InstallSkillDialogProps> = ({ open, on
   const installSkills = useSkillsCatalogStore((s) => s.installSkills);
   const isInstalling = useSkillsCatalogStore((s) => s.isInstalling);
   const [scope, setScope] = React.useState<'user' | 'project'>('user');
-  const [targetSource, setTargetSource] = React.useState<'opencode' | 'agents'>('opencode');
+  const [targetSource, setTargetSource] = React.useState<'codex' | 'agents'>('codex');
   const projects = useProjectsStore((s) => s.projects);
   const activeProjectId = useProjectsStore((s) => s.activeProjectId);
   const [targetProjectId, setTargetProjectId] = React.useState<string | null>(null);
@@ -52,7 +52,7 @@ export const InstallSkillDialog: React.FC<InstallSkillDialogProps> = ({ open, on
     source: string;
     subpath?: string;
     scope: 'user' | 'project';
-    targetSource: 'opencode' | 'agents';
+    targetSource: 'codex' | 'agents';
     skillDir: string;
     directoryOverride?: string | null;
   } | null>(null);
@@ -60,7 +60,7 @@ export const InstallSkillDialog: React.FC<InstallSkillDialogProps> = ({ open, on
   React.useEffect(() => {
     if (!open) return;
     setScope('user');
-    setTargetSource('opencode');
+    setTargetSource('codex');
     setTargetProjectId(activeProjectId);
     setConflictsOpen(false);
     setConflicts([]);
@@ -69,27 +69,27 @@ export const InstallSkillDialog: React.FC<InstallSkillDialogProps> = ({ open, on
 
   const locationLabelText = React.useCallback((value: SkillLocationValue) => {
     switch (value) {
-      case 'project-opencode':
-        return t('settings.skills.location.option.projectOpencode.label');
+      case 'project-codex':
+        return t('settings.skills.location.option.projectCodex.label');
       case 'user-agents':
         return t('settings.skills.location.option.userAgents.label');
       case 'project-agents':
         return t('settings.skills.location.option.projectAgents.label');
       default:
-        return t('settings.skills.location.option.userOpencode.label');
+        return t('settings.skills.location.option.userCodex.label');
     }
   }, [t]);
 
   const locationDescriptionText = React.useCallback((value: SkillLocationValue) => {
     switch (value) {
-      case 'project-opencode':
-        return t('settings.skills.location.option.projectOpencode.description');
+      case 'project-codex':
+        return t('settings.skills.location.option.projectCodex.description');
       case 'user-agents':
         return t('settings.skills.location.option.userAgents.description');
       case 'project-agents':
         return t('settings.skills.location.option.projectAgents.description');
       default:
-        return t('settings.skills.location.option.userOpencode.description');
+        return t('settings.skills.location.option.userCodex.description');
     }
   }, [t]);
 
@@ -122,7 +122,7 @@ export const InstallSkillDialog: React.FC<InstallSkillDialogProps> = ({ open, on
     source: string;
     subpath?: string;
     scope: 'user' | 'project';
-    targetSource: 'opencode' | 'agents';
+    targetSource: 'codex' | 'agents';
     skillDir: string;
     directoryOverride?: string | null;
     conflictDecisions?: Record<string, ConflictDecision>;
@@ -204,7 +204,7 @@ export const InstallSkillDialog: React.FC<InstallSkillDialogProps> = ({ open, on
                 onValueChange={(v) => {
                   const next = locationPartsFrom(v as SkillLocationValue);
                   setScope(next.scope);
-                  setTargetSource(next.source === 'agents' ? 'agents' : 'opencode');
+                  setTargetSource(next.source === 'agents' ? 'agents' : 'codex');
                 }}
               >
                 <SelectTrigger className="w-fit gap-1.5">

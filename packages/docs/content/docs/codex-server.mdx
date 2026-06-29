@@ -1,0 +1,91 @@
+---
+title: Codex Runtime
+description: Configure the Codex CLI runtime used by OpenChamber.
+---
+
+# Codex Runtime
+
+OpenChamber runs Codex through the Codex CLI. By default it uses `codex` on `PATH` and `CODEX_HOME` or `~/.codex` for configuration.
+
+## How OpenChamber finds Codex
+
+When OpenChamber starts, it resolves the Codex binary and home directory in this order:
+
+1. `OPENCHAMBER_CODEX_BINARY`, then `CODEX_BINARY`, then `codex` on `PATH`
+2. `CODEX_HOME`, otherwise `~/.codex`
+
+If nothing is configured, OpenChamber uses the normal Codex CLI installation.
+
+## Use a specific Codex installation
+
+Set these before starting OpenChamber:
+
+```bash
+CODEX_HOME=~/.codex openchamber
+OPENCHAMBER_CODEX_BINARY=/path/to/codex openchamber
+```
+
+Use `CODEX_HOME` for a separate Codex config directory, and `OPENCHAMBER_CODEX_BINARY` when the desired CLI is not first on `PATH`.
+
+## Manage OpenChamber from the CLI
+
+```bash
+openchamber status
+openchamber logs
+openchamber restart
+openchamber stop
+```
+
+`openchamber` on its own starts the server in the background. Add `--foreground` to keep it attached to your terminal.
+
+## Start OpenChamber at login
+
+Use `startup enable` to install a native user service. OpenChamber uses `launchd` on macOS, `systemd --user` on Linux, and Task Scheduler on Windows.
+
+```bash
+openchamber startup enable
+openchamber startup status
+openchamber startup disable
+```
+
+To protect the UI, set the password when enabling the service:
+
+```bash
+OPENCHAMBER_UI_PASSWORD='secret' openchamber startup enable
+```
+
+For a headless server that starts at login and is meant for desktop or mobile clients, include `--api-only` and a reachable host:
+
+```bash
+openchamber startup enable --port 3000 --api-only --host 0.0.0.0 --ui-password secret
+```
+
+`startup enable` snapshots your current environment into the service so it behaves more like starting `openchamber` from the same shell. This keeps provider tokens, `PATH`, SSH agent settings, and other CLI auth/config variables available. Use `--no-env-snapshot` if you want a minimal service environment.
+
+The startup service remembers `--port`, `--host`, `--ui-password`, and `--api-only`. CLI restart and update restart reuse those saved settings.
+
+To create a connection link for another OpenChamber app, use:
+
+```bash
+openchamber connect-url --port 3000 --server http://your-host:3000 --qr
+```
+
+Run `openchamber connect-url --help` to see all link options, including `--name`, `--lan`, `--server`, `--api-only`, `--ui-password`, and `--qr`.
+
+You can still manage tunnels independently for that running service:
+
+```bash
+openchamber tunnel start --port 3000
+openchamber tunnel stop --port 3000
+```
+
+Stopping the tunnel does not restart the service or the app.
+
+## "Codex is restarting"
+
+While the server is starting or restarting, OpenChamber shows an "Codex is restarting" state and pauses requests until it's ready. This is normal right after launch or a restart. If it never clears, see [Codex connection](/troubleshooting/codex-connection/).
+
+## Related
+
+- [Providers, Models & Agents](/providers/) — set up what the server talks to
+- [Codex connection](/troubleshooting/codex-connection/) — if it won't connect

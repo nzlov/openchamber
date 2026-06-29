@@ -8,7 +8,7 @@ import type {
   Session,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/lib/codex/types"
 import { Binary } from "./binary"
 import type { FileDiff, GlobalState, State } from "./types"
 import { dropSessionCaches } from "./session-cache"
@@ -297,30 +297,47 @@ export function applyDirectoryEvent(
     }
 
     case "message.updated": {
-      const info = (event.properties as { info: Message }).info
+      const props = event.properties as { info: Message; parts?: Part[] }
+      const info = props.info
+      const incomingParts = Array.isArray(props.parts)
+        ? props.parts
+          .filter((part) => !SKIP_PARTS.has(part.type))
+          .map((part) => ((part as { messageID?: string }).messageID ? part : { ...part, messageID: info.id } as Part))
+        : []
       const messages = draft.message[info.sessionID]
+      let changed = false
       if (!messages) {
         draft.message[info.sessionID] = [info]
-        return true
-      }
-      const result = Binary.search(messages, info.id, (m) => m.id)
-      if (result.found) {
-        // Skip message replacement if unchanged — preserves reference, avoids re-render
-        const existing = messages[result.index]
-        const unchanged = areMessageUpdateFieldsEqual(existing, info)
-        if (unchanged) {
-          syncDebug.reducer.messageUpdatedUnchanged(info.sessionID, info.id, info.role, (info as { finish?: unknown }).finish, (info.time as { completed?: number })?.completed)
-          return false
-        }
-        const next = [...messages]
-        next[result.index] = info
-        draft.message[info.sessionID] = next
+        changed = true
       } else {
-        const next = [...messages]
-        next.splice(result.index, 0, info)
-        draft.message[info.sessionID] = next
+        const result = Binary.search(messages, info.id, (m) => m.id)
+        if (result.found) {
+          // Skip message replacement if unchanged — preserves reference, avoids re-render
+          const existing = messages[result.index]
+          const unchanged = areMessageUpdateFieldsEqual(existing, info)
+          if (!unchanged) {
+            const next = [...messages]
+            next[result.index] = info
+            draft.message[info.sessionID] = next
+            changed = true
+          }
+        } else {
+          const next = [...messages]
+          next.splice(result.index, 0, info)
+          draft.message[info.sessionID] = next
+          changed = true
+        }
       }
-      return true
+
+      if (incomingParts.length > 0) {
+        draft.part[info.id] = incomingParts
+        changed = true
+      }
+
+      if (!changed) {
+        syncDebug.reducer.messageUpdatedUnchanged(info.sessionID, info.id, info.role, (info as { finish?: unknown }).finish, (info.time as { completed?: number })?.completed)
+      }
+      return changed
     }
 
     case "message.removed": {

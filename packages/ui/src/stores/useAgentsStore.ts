@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import type { StoreApi, UseBoundStore } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
-import type { Agent, PermissionConfig } from "@opencode-ai/sdk/v2";
-import { opencodeClient } from "@/lib/opencode/client";
+import type { Agent, PermissionConfig } from "@/lib/codex/types";
+import { codexRuntimeClient } from "@/lib/codex/runtime-client";
 import { emitConfigChange, scopeMatches, subscribeToConfigChanges, type ConfigChangeScope } from "@/lib/configSync";
 import {
   startConfigUpdate,
@@ -18,12 +18,12 @@ import { invalidateSkillsLoadCache, useSkillsStore } from "@/stores/useSkillsSto
 import { runtimeFetch } from "@/lib/runtime-fetch";
 
 // Note: useDirectoryStore cannot be imported at top level to avoid circular dependency
-// useDirectoryStore -> useAgentsStore (for refreshAfterOpenCodeRestart)
+// useDirectoryStore -> useAgentsStore (for refreshAfterRuntimeRestart)
 // useAgentsStore -> useDirectoryStore (for currentDirectory)
 const getCurrentDirectory = (): string | null => {
-  const opencodeDirectory = opencodeClient.getDirectory();
-  if (typeof opencodeDirectory === 'string' && opencodeDirectory.trim().length > 0) {
-    return opencodeDirectory;
+  const codexDirectory = codexRuntimeClient.getDirectory();
+  if (typeof codexDirectory === 'string' && codexDirectory.trim().length > 0) {
+    return codexDirectory;
   }
 
   try {
@@ -49,8 +49,8 @@ const getConfigDirectory = (): string | null => {
       return activeProject.path.trim();
     }
 
-    // 2. Fallback: current OpenCode directory (session / runtime)
-    const clientDir = opencodeClient.getDirectory();
+    // 2. Fallback: current Codex directory (session / runtime)
+    const clientDir = codexRuntimeClient.getDirectory();
     if (clientDir?.trim()) {
       return clientDir.trim();
     }
@@ -118,8 +118,8 @@ export interface AgentConfig {
 /**
  * Result of an agent config mutation.
  * `requiresManualRestart` is true when the change was persisted to disk but the
- * connected (external) OpenCode server could not be reloaded by OpenChamber, so
- * the user must restart that server before the change takes effect.
+ * connected Codex runtime could not be reloaded by OpenChamber, so the user
+ * must restart that runtime before the change takes effect.
  */
 export interface AgentMutationResult {
   ok: boolean;
@@ -137,8 +137,8 @@ export type AgentWithExtras = Agent & {
 };
 
 /** Parse the subfolder group name from an agent file path.
- *  e.g. "~/.config/opencode/agents/business/ceo.md" → "business"
- *  e.g. "~/.config/opencode/agents/ceo.md"          → undefined
+ *  e.g. "~/.codex/agents/business/ceo.md" → "business"
+ *  e.g. "~/.codex/agents/ceo.md"          → undefined
  */
 function parseAgentGroup(path: string | null | undefined): string | undefined {
   if (!path) return undefined;
@@ -158,7 +158,7 @@ export const isAgentBuiltIn = (agent: Agent): boolean => {
 };
 
 // Helper to check if agent is hidden (internal agents like title, compaction, summary)
-// Checks both top-level hidden and options.hidden (OpenCode API inconsistency workaround)
+// Checks both top-level hidden and options.hidden (Codex API inconsistency workaround)
 export const isAgentHidden = (agent: Agent): boolean => {
   const extended = agent as AgentWithExtras;
   return extended.hidden === true || extended.options?.hidden === true;
@@ -261,7 +261,7 @@ export const useAgentsStore = create<AgentsStore>()(
                 // Ensure we list agents using the correct project context. Pass the
                 // directory directly so this shares the in-flight request with the config
                 // store instead of issuing a duplicate agents fetch at startup.
-                const agents = await opencodeClient.listAgents(configDirectory);
+                const agents = await codexRuntimeClient.listAgents(configDirectory);
 
                 const agentsWithScope = await Promise.all(
                   agents.map(async (agent) => {
@@ -270,7 +270,7 @@ export const useAgentsStore = create<AgentsStore>()(
                       const response = await runtimeFetch(`/api/config/agents/${encodeURIComponent(agent.name)}${queryParams}`, {
                         headers: {
                           'Cache-Control': 'no-cache',
-                          ...(configDirectory ? { 'x-opencode-directory': configDirectory } : {}),
+                          ...(configDirectory ? { 'x-codex-directory': configDirectory } : {}),
                         }
                       });
 
@@ -361,7 +361,7 @@ export const useAgentsStore = create<AgentsStore>()(
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(configDirectory ? { 'x-opencode-directory': configDirectory } : {}),
+                ...(configDirectory ? { 'x-codex-directory': configDirectory } : {}),
               },
               body: JSON.stringify(agentConfig)
             });
@@ -374,9 +374,9 @@ export const useAgentsStore = create<AgentsStore>()(
 
             invalidateAgentsLoadCache(configDirectory);
 
-            // External OpenCode server: persisted to disk but not reloaded.
+            // Codex runtime persisted to disk but was not reloaded.
             // Skip the reload so the form keeps the just-saved values instead of
-            // reverting to the server's stale, startup-cached config.
+            // reverting to stale, startup-cached config.
             if (payload?.requiresManualRestart) {
               return { ok: true, requiresManualRestart: true };
             }
@@ -384,7 +384,7 @@ export const useAgentsStore = create<AgentsStore>()(
             const needsReload = payload?.requiresReload ?? true;
             if (needsReload) {
               requiresReload = true;
-              await refreshAfterOpenCodeRestart({
+              await refreshAfterRuntimeRestart({
                 message: payload?.message,
                 delayMs: payload?.reloadDelayMs,
                 scopes: ["agents"],
@@ -432,7 +432,7 @@ export const useAgentsStore = create<AgentsStore>()(
               method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
-                ...(configDirectory ? { 'x-opencode-directory': configDirectory } : {}),
+                ...(configDirectory ? { 'x-codex-directory': configDirectory } : {}),
               },
               body: JSON.stringify(agentConfig)
             });
@@ -445,9 +445,9 @@ export const useAgentsStore = create<AgentsStore>()(
 
             invalidateAgentsLoadCache(configDirectory);
 
-            // External OpenCode server: persisted to disk but not reloaded.
+            // Codex runtime persisted to disk but was not reloaded.
             // Skip the reload so the form keeps the just-saved values instead of
-            // reverting to the server's stale, startup-cached config.
+            // reverting to stale, startup-cached config.
             if (payload?.requiresManualRestart) {
               return { ok: true, requiresManualRestart: true };
             }
@@ -455,7 +455,7 @@ export const useAgentsStore = create<AgentsStore>()(
             const needsReload = payload?.requiresReload ?? true;
             if (needsReload) {
               requiresReload = true;
-              await refreshAfterOpenCodeRestart({
+              await refreshAfterRuntimeRestart({
                 message: payload?.message,
                 delayMs: payload?.reloadDelayMs,
                 scopes: ["agents"],
@@ -491,7 +491,7 @@ export const useAgentsStore = create<AgentsStore>()(
               method: 'DELETE',
               headers: {
                 'Content-Type': 'application/json',
-                ...(configDirectory ? { 'x-opencode-directory': configDirectory } : {}),
+                ...(configDirectory ? { 'x-codex-directory': configDirectory } : {}),
               },
               body: JSON.stringify({ scope }),
             });
@@ -508,7 +508,7 @@ export const useAgentsStore = create<AgentsStore>()(
               set({ selectedAgentName: null });
             }
 
-            // External OpenCode server: persisted to disk but not reloaded.
+            // Codex runtime persisted to disk but was not reloaded.
             if (payload?.requiresManualRestart) {
               return { ok: true, requiresManualRestart: true };
             }
@@ -516,7 +516,7 @@ export const useAgentsStore = create<AgentsStore>()(
             const needsReload = payload?.requiresReload ?? true;
             if (needsReload) {
               requiresReload = true;
-              await refreshAfterOpenCodeRestart({
+              await refreshAfterRuntimeRestart({
                 message: payload?.message,
                 delayMs: payload?.reloadDelayMs,
                 scopes: ["agents"],
@@ -570,7 +570,7 @@ if (typeof window !== "undefined") {
   window.__zustand_agents_store__ = useAgentsStore;
 }
 
-async function waitForOpenCodeConnection(delayMs?: number) {
+async function waitForCodexConnection(delayMs?: number) {
   const initialPause = typeof delayMs === "number" && delayMs > 0
     ? Math.min(delayMs, FAST_HEALTH_POLL_INTERVAL_MS)
     : 0;
@@ -585,14 +585,14 @@ async function waitForOpenCodeConnection(delayMs?: number) {
 
   while (Date.now() - start < MAX_HEALTH_WAIT_MS) {
     attempt += 1;
-    updateConfigUpdateMessage(`Waiting for OpenCode… (attempt ${attempt})`);
+    updateConfigUpdateMessage(`Waiting for Codex… (attempt ${attempt})`);
 
     try {
-      const isHealthy = await opencodeClient.checkHealth();
+      const isHealthy = await codexRuntimeClient.checkHealth();
       if (isHealthy) {
         return;
       }
-      lastError = new Error("OpenCode health check reported not ready");
+      lastError = new Error("Codex health check reported not ready");
     } catch (error) {
       lastError = error;
     }
@@ -611,7 +611,7 @@ async function waitForOpenCodeConnection(delayMs?: number) {
     await sleep(waitMs);
   }
 
-  throw lastError || new Error("OpenCode did not become ready in time");
+  throw lastError || new Error("Codex did not become ready in time");
 }
 
 type ConfigRefreshMode = "active" | "projects";
@@ -646,7 +646,7 @@ async function performConfigRefresh(options: {
   }
 
   try {
-    await waitForOpenCodeConnection(delayMs);
+    await waitForCodexConnection(delayMs);
 
     const configStore = useConfigStore.getState();
     const agentConfigStore = useAgentsStore.getState();
@@ -706,7 +706,7 @@ async function performConfigRefresh(options: {
     updateConfigUpdateMessage("Refreshing configuration…");
     await Promise.all([...sdkRefreshTasks, ...uiRefreshTasks]);
   } catch (error) {
-    updateConfigUpdateMessage("OpenCode refresh failed. Please retry.");
+    updateConfigUpdateMessage("Runtime refresh failed. Please retry.");
     await sleep(1500);
     throw error;
   } finally {
@@ -714,7 +714,7 @@ async function performConfigRefresh(options: {
   }
 }
 
-export async function refreshAfterOpenCodeRestart(options?: {
+export async function refreshAfterRuntimeRestart(options?: {
   message?: string;
   delayMs?: number;
   scopes?: ConfigChangeScope[];
@@ -723,13 +723,13 @@ export async function refreshAfterOpenCodeRestart(options?: {
   await performConfigRefresh(options);
 }
 
-export async function reloadOpenCodeConfiguration(options?: {
+export async function reloadRuntimeConfiguration(options?: {
   message?: string;
   delayMs?: number;
   scopes?: ConfigChangeScope[];
   mode?: ConfigRefreshMode;
 }) {
-  startConfigUpdate(options?.message || "Reloading OpenCode configuration…");
+  startConfigUpdate(options?.message || "Reloading runtime configuration…");
 
   try {
 
@@ -752,16 +752,16 @@ export async function reloadOpenCodeConfiguration(options?: {
     };
 
     if (payload?.requiresReload) {
-      await refreshAfterOpenCodeRestart({
+      await refreshAfterRuntimeRestart({
         ...refreshOptions,
         message: payload.message,
         delayMs: payload.reloadDelayMs,
       });
     } else {
-      await refreshAfterOpenCodeRestart(refreshOptions);
+      await refreshAfterRuntimeRestart(refreshOptions);
     }
   } catch (error) {
-    console.error('[reloadOpenCodeConfiguration] Failed:', error);
+    console.error('[reloadRuntimeConfiguration] Failed:', error);
     updateConfigUpdateMessage('Failed to reload configuration. Please try again.');
     await sleep(2000);
     finishConfigUpdate();

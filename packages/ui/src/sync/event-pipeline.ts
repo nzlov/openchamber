@@ -12,8 +12,8 @@
  * Abort controller created once at init, cleaned up via returned cleanup fn.
  */
 
-import type { Event, OpencodeClient, SessionStatus } from "@opencode-ai/sdk/v2/client"
-import { opencodeClient } from "@/lib/opencode/client"
+import type { Event, CodexRuntimeSdkClient, SessionStatus } from "@/lib/codex/types"
+import { codexRuntimeClient } from "@/lib/codex/runtime-client"
 import { getRuntimeUrlResolver } from "@/lib/runtime-url"
 import { clearRuntimeUrlAuthToken, refreshRuntimeUrlAuthToken } from "@/lib/runtime-auth"
 import { syncDebug } from "./debug"
@@ -37,7 +37,7 @@ const RETRY_BACKOFF_CAP_VISIBLE_MS = 5_000
 const RETRY_BACKOFF_CAP_HIDDEN_OR_OFFLINE_MS = 60_000
 const RETRY_BACKOFF_MAX_EXPONENT = 8
 export type EventPipelineInput = {
-  sdk: OpencodeClient
+  sdk: CodexRuntimeSdkClient
   onEvent: (directory: string, payload: Event) => void
   routeDirectory?: (directory: string, payload: Event) => string
   /** Called after stream reconnects (visibility restore or heartbeat timeout). */
@@ -198,7 +198,7 @@ function resolveEventPayload(payload: unknown): Event | null {
 function buildGlobalEventWsUrl(lastEventId?: string): string {
   let baseUrl = "/api"
   try {
-    const client = opencodeClient as { getBaseUrl?: () => string }
+    const client = codexRuntimeClient as { getBaseUrl?: () => string }
     if (typeof client.getBaseUrl === "function") {
       baseUrl = client.getBaseUrl()
     }
@@ -741,7 +741,10 @@ export function createEventPipeline(input: EventPipelineInput): EventPipeline {
     if (transport === "sse") {
       return "sse"
     }
-    return wsFallbackUntil > Date.now() ? "sse" : "ws"
+    if (wsFallbackUntil > Date.now()) {
+      return "sse"
+    }
+    return "sse"
   }
 
   void (async () => {

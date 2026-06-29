@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import type { ProjectEntry } from '@/lib/api/types';
 import type { DesktopSettings } from '@/lib/desktop';
@@ -594,7 +594,7 @@ export const useProjectsStore = create<ProjectsStore>()(
       if (nextActiveId) {
         const nextActive = nextProjects.find((project) => project.id === nextActiveId);
         if (nextActive) {
-          opencodeClient.setDirectory(nextActive.path);
+          codexRuntimeClient.setDirectory(nextActive.path);
           useDirectoryStore.getState().setDirectory(nextActive.path, { showOverlay: false });
         }
       } else {
@@ -623,7 +623,7 @@ export const useProjectsStore = create<ProjectsStore>()(
       set({ projects: nextProjects, activeProjectId: id });
       persistProjects(nextProjects, id);
 
-      opencodeClient.setDirectory(target.path);
+      codexRuntimeClient.setDirectory(target.path);
       useDirectoryStore.getState().setDirectory(target.path, { showOverlay: false });
     },
 
@@ -881,7 +881,7 @@ export const useProjectsStore = create<ProjectsStore>()(
       if (incomingActive) {
         const activeProject = incomingProjects.find((project) => project.id === incomingActive);
         if (activeProject) {
-          opencodeClient.setDirectory(activeProject.path);
+          codexRuntimeClient.setDirectory(activeProject.path);
           useDirectoryStore.getState().setDirectory(activeProject.path, { showOverlay: false });
         }
       }
@@ -915,7 +915,7 @@ export const useProjectsStore = create<ProjectsStore>()(
       }
 
       if (result.activeProject) {
-        opencodeClient.setDirectory(result.activeProject.path);
+        codexRuntimeClient.setDirectory(result.activeProject.path);
         useDirectoryStore.getState().setDirectory(result.activeProject.path, { showOverlay: false });
       }
 

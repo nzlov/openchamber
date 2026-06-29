@@ -58,7 +58,7 @@ export const registerNotificationRoutes = (app, dependencies) => {
     try {
       await ensureGlobalWatcherStarted();
     } catch (error) {
-      console.warn('[OpenCodeWatcher] lazy start failed:', error?.message ?? error);
+      console.warn('[NotificationWatcher] lazy start failed:', error?.message ?? error);
     }
   };
 

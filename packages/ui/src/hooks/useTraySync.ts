@@ -1,10 +1,10 @@
 import React from 'react';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import { canUseElectronDesktopIPC, invokeDesktop, isDesktopLocalOriginActive } from '@/lib/desktop';
 import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
 import { desktopHostsGet, getDesktopHostApiUrl, locationMatchesHost, redactSensitiveUrl } from '@/lib/desktopHosts';
 import { getSyncChildStores, getAllSyncSessions } from '@/sync/sync-refs';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { useGlobalSessionStatusStore, applyGlobalSessionStatusSnapshot } from '@/sync/global-session-status';
 import { useNotificationStore } from '@/sync/notification-store';
 import { respondToPermission } from '@/sync/session-actions';
@@ -449,7 +449,7 @@ export const useTraySync = (): void => {
       await Promise.all([...targets.entries()].map(async ([directory, sessionIds]) => {
         // null = fetch failed → keep that directory's current entries;
         // {} = authoritative "everything here is idle".
-        const raw = await opencodeClient.getSessionStatusForDirectory(directory).catch(() => null);
+        const raw = await codexRuntimeClient.getSessionStatusForDirectory(directory).catch(() => null);
         if (disposed || raw === null) return;
         applyGlobalSessionStatusSnapshot(directory, raw, sessionIds);
       }));

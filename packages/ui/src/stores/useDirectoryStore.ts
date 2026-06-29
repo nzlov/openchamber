@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { getDesktopHomeDirectory, isVSCodeRuntime } from '@/lib/desktop';
 import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import { updateDesktopSettings } from '@/lib/persistence';
@@ -185,7 +185,7 @@ const initializeHomeDirectory = async () => {
   };
 
   try {
-    const fsHome = await opencodeClient.getFilesystemHome();
+    const fsHome = await codexRuntimeClient.getFilesystemHome();
     const resolved = acceptCandidate(fsHome);
     if (resolved) {
       return resolved;
@@ -195,7 +195,7 @@ const initializeHomeDirectory = async () => {
   }
 
   try {
-    const info = await opencodeClient.getSystemInfo();
+    const info = await codexRuntimeClient.getSystemInfo();
     const resolved = acceptCandidate(info?.homeDirectory);
     if (resolved) {
       return resolved;
@@ -245,7 +245,7 @@ const initialCurrentDirectory = (() => {
 })();
 
 if (initialCurrentDirectory) {
-  opencodeClient.setDirectory(initialCurrentDirectory);
+  codexRuntimeClient.setDirectory(initialCurrentDirectory);
 }
 const initialIsHomeReady = Boolean(initialHomeDirectory && initialHomeDirectory !== '/');
 
@@ -269,7 +269,7 @@ export const useDirectoryStore = create<DirectoryStore>()(
           console.log('[DirectoryStore] setDirectory called with path:', resolvedPath);
         }
 
-        opencodeClient.setDirectory(resolvedPath);
+        codexRuntimeClient.setDirectory(resolvedPath);
         invalidateFileSearchCache();
 
         set((state) => {
@@ -295,7 +295,7 @@ export const useDirectoryStore = create<DirectoryStore>()(
           const newIndex = state.historyIndex - 1;
           const newDirectory = state.directoryHistory[newIndex];
 
-          opencodeClient.setDirectory(newDirectory);
+          codexRuntimeClient.setDirectory(newDirectory);
           invalidateFileSearchCache();
 
           safeStorage.setItem('lastDirectory', newDirectory);
@@ -318,7 +318,7 @@ export const useDirectoryStore = create<DirectoryStore>()(
           const newIndex = state.historyIndex + 1;
           const newDirectory = state.directoryHistory[newIndex];
 
-          opencodeClient.setDirectory(newDirectory);
+          codexRuntimeClient.setDirectory(newDirectory);
           invalidateFileSearchCache();
 
           safeStorage.setItem('lastDirectory', newDirectory);
@@ -419,7 +419,7 @@ export const useDirectoryStore = create<DirectoryStore>()(
 
         if ((shouldReplaceCurrent || currentChanged) && resolvedReady) {
           const nextDirectory = shouldReplaceCurrent ? resolvedHome : (resolvedCurrent as string);
-          opencodeClient.setDirectory(nextDirectory);
+          codexRuntimeClient.setDirectory(nextDirectory);
           invalidateFileSearchCache();
           safeStorage.setItem('lastDirectory', nextDirectory);
           void updateDesktopSettings({ lastDirectory: nextDirectory });

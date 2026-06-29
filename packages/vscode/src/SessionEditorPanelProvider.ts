@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { handleBridgeMessage, type BridgeRequest, type BridgeResponse } from './bridge';
 import { getThemeKindName } from './theme';
-import type { OpenCodeManager, ConnectionStatus } from './opencode';
+import type { CodexManager, ConnectionStatus } from './codex';
 import { getWebviewShikiThemes } from './shikiThemes';
 import { getWebviewHtml } from './webviewHtml';
 import { openSseProxy } from './sseProxy';
@@ -52,7 +52,7 @@ export class SessionEditorPanelProvider {
   constructor(
     private readonly _context: vscode.ExtensionContext,
     private readonly _extensionUri: vscode.Uri,
-    private readonly _openCodeManager?: OpenCodeManager
+    private readonly _codexManager?: CodexManager
   ) {
     this._webviewDevServerUrl = resolveWebviewDevServerUrl(this._context);
 
@@ -130,7 +130,7 @@ export class SessionEditorPanelProvider {
 
     panel.webview.onDidReceiveMessage(async (message: BridgeRequest) => {
       if (message.type === 'restartApi') {
-        await this._openCodeManager?.restart();
+        await this._codexManager?.restart();
         return;
       }
 
@@ -157,7 +157,7 @@ export class SessionEditorPanelProvider {
       }
 
       const response = await handleBridgeMessage(message, {
-        manager: this._openCodeManager,
+        manager: this._codexManager,
         context: this._context,
       });
       state.panel.webview.postMessage(response);
@@ -408,7 +408,7 @@ export class SessionEditorPanelProvider {
     const { path, headers } = (payload || {}) as { path?: string; headers?: Record<string, string> };
     const normalizedPath = typeof path === 'string' && path.trim().length > 0 ? path.trim() : '/event';
 
-    if (!this._openCodeManager) {
+    if (!this._codexManager) {
       return {
         id,
         type,
@@ -422,7 +422,7 @@ export class SessionEditorPanelProvider {
 
     try {
       const start = await openSseProxy({
-        manager: this._openCodeManager,
+        manager: this._codexManager,
         path: normalizedPath,
         headers: this._buildSseHeaders(headers),
         signal: controller.signal,
@@ -487,7 +487,7 @@ export class SessionEditorPanelProvider {
     );
     const workspaceFolders = resolveWorkspaceFolders(vscode.workspace.workspaceFolders ?? []);
     const initialStatus = this._cachedStatus;
-    const cliAvailable = this._openCodeManager?.isCliAvailable() ?? false;
+    const cliAvailable = this._codexManager?.isCliAvailable() ?? false;
 
     return getWebviewHtml({
       webview,

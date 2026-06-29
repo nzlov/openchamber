@@ -295,7 +295,7 @@ A label with no translation for the active locale falls back to the English
 
 ### What not to translate
 
-- brand and product nouns: OpenChamber, OpenCode, VS Code, PWA, GitHub, Discord,
+- brand and product nouns: OpenChamber, Codex, VS Code, PWA, GitHub, Discord,
   macOS, SSH
 - code blocks, shell commands, file paths, flags, and config keys
 - the page filename and the sidebar `link` (these stay identical across locales)

@@ -25,8 +25,8 @@
  * @property {number} [nextResetTime]
  * @property {Array<{modelCode: string, usage: number}>} [usageDetails]
  */
-import { readAuthFile } from '../../opencode/auth.js';
-import { readConfigLayers } from '../../opencode/shared.js';
+import { readAuthFile } from '../../openchamber-runtime/auth.js';
+import { readConfigLayers } from '../../openchamber-runtime/shared.js';
 import {
   getAuthEntry,
   normalizeAuthEntry,

@@ -6,7 +6,7 @@ import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useFilesViewTabsStore } from '@/stores/useFilesViewTabsStore';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useChatSearchDirectory } from '@/hooks/useChatSearchDirectory';
-import type { ProjectFileSearchHit } from '@/lib/opencode/client';
+import type { ProjectFileSearchHit } from '@/lib/codex/runtime-client';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Icon } from "@/components/icon/Icon";
 import { useDirectoryShowHidden } from '@/lib/directoryShowHidden';
@@ -29,6 +29,7 @@ interface FileMentionAutocompleteProps {
   onFileSelect: (file: FileInfo) => void;
   onAgentSelect?: (agentName: string) => void;
   onClose: () => void;
+  showAgents?: boolean;
   style?: React.CSSProperties;
 }
 
@@ -37,6 +38,7 @@ export const FileMentionAutocomplete = React.forwardRef<FileMentionHandle, FileM
   onFileSelect,
   onAgentSelect,
   onClose,
+  showAgents = true,
   style,
 }, ref) => {
   const { t } = useI18n();
@@ -116,8 +118,8 @@ export const FileMentionAutocomplete = React.forwardRef<FileMentionHandle, FileM
     return mapped;
   }, [normalizedSearchQuery, projectRoot, projectTabs]);
   const visibleAgents = React.useMemo(
-    () => normalizedSearchQuery.length > 0 ? agents : agents.slice(0, 2),
-    [agents, normalizedSearchQuery.length],
+    () => showAgents ? (normalizedSearchQuery.length > 0 ? agents : agents.slice(0, 2)) : [],
+    [agents, normalizedSearchQuery.length, showAgents],
   );
   const visibleDirectories = directories;
   const visibleRecentFiles = recentFiles;
@@ -255,6 +257,11 @@ export const FileMentionAutocomplete = React.forwardRef<FileMentionHandle, FileM
   }, [currentDirectory, debouncedQuery, searchFiles, showHidden, showGitignored]);
 
   React.useEffect(() => {
+    if (!showAgents) {
+      setAgents([]);
+      return;
+    }
+
     const visibleAgents = getVisibleAgents();
     const normalizedQuery = (searchQuery ?? '').trim().toLowerCase();
     const filtered = visibleAgents
@@ -271,7 +278,7 @@ export const FileMentionAutocomplete = React.forwardRef<FileMentionHandle, FileM
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     setAgents(filtered);
-  }, [getVisibleAgents, searchQuery]);
+  }, [getVisibleAgents, searchQuery, showAgents]);
 
   React.useEffect(() => {
     setSelectedIndex(0);

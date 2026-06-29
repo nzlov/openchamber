@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useDirectorySync } from '@/sync/sync-context';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useDeviceInfo } from '@/lib/device';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { cn } from '@/lib/utils';
 import { ModelSelector } from './ModelSelector';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -287,12 +287,12 @@ export const AgentsPage: React.FC = () => {
     let cancelled = false;
 
     const fetchToolIds = async () => {
-      const ids = await opencodeClient.listToolIds({ directory: currentDirectory });
+      const ids = await codexRuntimeClient.listToolIds({ directory: currentDirectory });
       if (cancelled) {
         return;
       }
 
-      // OpenCode permissions are keyed by tool name, but some tools are grouped
+      // Codex permissions are keyed by tool name, but some tools are grouped
       // under a single permission key. E.g. `edit` covers `write`, `patch`, and `multiedit`.
       const editCoveredToolIds = new Set(['write', 'patch', 'multiedit']);
 

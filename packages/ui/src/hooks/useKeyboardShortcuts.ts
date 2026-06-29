@@ -8,12 +8,12 @@ import { useAssistantStatus } from '@/hooks/useAssistantStatus';
 import { createWorktreeSession } from '@/lib/worktreeSessionCreator';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { canUseElectronDesktopIPC, invokeDesktop, isVSCodeRuntime } from '@/lib/desktop';
-import { showOpenCodeStatus } from '@/lib/openCodeStatus';
 import { eventMatchesShortcut, getEffectiveShortcutCombo, normalizeCombo } from '@/lib/shortcuts';
 import { readEmbeddedThemeSearchParams } from '@/contexts/theme-embedded-bootstrap';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { getCycledPrimaryAgentName } from '@/components/chat/mobileControlsUtils';
+import { SUPPORTS_AGENT_SELECTION } from '@/lib/codex/capabilities';
 
 export const useKeyboardShortcuts = () => {
   const openNewSessionDraft = useSessionUIStore((s) => s.openNewSessionDraft);
@@ -142,12 +142,6 @@ export const useKeyboardShortcuts = () => {
         return;
       }
 
-      if (eventMatchesShortcut(e, combo('open_status'))) {
-        e.preventDefault();
-        void showOpenCodeStatus();
-        return;
-      }
-
       if (eventMatchesShortcut(e, combo('open_help'))) {
         e.preventDefault();
         toggleHelpDialog();
@@ -233,51 +227,53 @@ export const useKeyboardShortcuts = () => {
         return;
       }
 
-      const cycleAgentCombo = combo('cycle_agent');
-      const cycleAgentBackwardCombo = cycleAgentCombo && !cycleAgentCombo.includes('shift')
-        ? normalizeCombo(`shift+${cycleAgentCombo}`)
-        : '';
-      const cycleAgentDirection = cycleAgentBackwardCombo && eventMatchesShortcut(e, cycleAgentBackwardCombo)
-        ? -1
-        : eventMatchesShortcut(e, cycleAgentCombo)
-          ? 1
-          : 0;
+      if (SUPPORTS_AGENT_SELECTION) {
+        const cycleAgentCombo = combo('cycle_agent');
+        const cycleAgentBackwardCombo = cycleAgentCombo && !cycleAgentCombo.includes('shift')
+          ? normalizeCombo(`shift+${cycleAgentCombo}`)
+          : '';
+        const cycleAgentDirection = cycleAgentBackwardCombo && eventMatchesShortcut(e, cycleAgentBackwardCombo)
+          ? -1
+          : eventMatchesShortcut(e, cycleAgentCombo)
+            ? 1
+            : 0;
 
-      if (cycleAgentDirection !== 0) {
-        const {
-          isSettingsDialogOpen,
-          isCommandPaletteOpen,
-          isHelpDialogOpen,
-          isSessionSwitcherOpen,
-          isAboutDialogOpen,
-          activeMainTab,
-        } = useUIStore.getState();
+        if (cycleAgentDirection !== 0) {
+          const {
+            isSettingsDialogOpen,
+            isCommandPaletteOpen,
+            isHelpDialogOpen,
+            isSessionSwitcherOpen,
+            isAboutDialogOpen,
+            activeMainTab,
+          } = useUIStore.getState();
 
-        const hasOverlay = isSettingsDialogOpen || isCommandPaletteOpen || isHelpDialogOpen || isSessionSwitcherOpen || isAboutDialogOpen;
-        if (hasOverlay || activeMainTab !== 'chat' || !isChatInputTarget(e.target)) {
+          const hasOverlay = isSettingsDialogOpen || isCommandPaletteOpen || isHelpDialogOpen || isSessionSwitcherOpen || isAboutDialogOpen;
+          if (hasOverlay || activeMainTab !== 'chat' || !isChatInputTarget(e.target)) {
+            return;
+          }
+
+          const configState = useConfigStore.getState();
+          const nextAgentName = getCycledPrimaryAgentName(
+            configState.getVisibleAgents(),
+            configState.currentAgentName,
+            cycleAgentDirection,
+          );
+
+          if (!nextAgentName) {
+            return;
+          }
+
+          e.preventDefault();
+          configState.setAgent(nextAgentName);
+          useUIStore.getState().addRecentAgent(nextAgentName);
+
+          const sessionId = useSessionUIStore.getState().currentSessionId;
+          if (sessionId) {
+            useSelectionStore.getState().saveSessionAgentSelection(sessionId, nextAgentName);
+          }
           return;
         }
-
-        const configState = useConfigStore.getState();
-        const nextAgentName = getCycledPrimaryAgentName(
-          configState.getVisibleAgents(),
-          configState.currentAgentName,
-          cycleAgentDirection,
-        );
-
-        if (!nextAgentName) {
-          return;
-        }
-
-        e.preventDefault();
-        configState.setAgent(nextAgentName);
-        useUIStore.getState().addRecentAgent(nextAgentName);
-
-        const sessionId = useSessionUIStore.getState().currentSessionId;
-        if (sessionId) {
-          useSelectionStore.getState().saveSessionAgentSelection(sessionId, nextAgentName);
-        }
-        return;
       }
 
       if (eventMatchesShortcut(e, combo('toggle_right_sidebar'))) {

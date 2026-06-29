@@ -3,8 +3,6 @@ import { summarizeText as summarizeSharedText } from '../text/summarization.js';
 export const createNotificationTemplateRuntime = (deps) => {
   const {
     readSettingsFromDisk,
-    buildOpenCodeUrl,
-    getOpenCodeAuthHeaders,
     resolveGitBinaryForSpawn,
   } = deps;
 
@@ -135,43 +133,7 @@ export const createNotificationTemplateRuntime = (deps) => {
 
   const fetchLastAssistantMessageText = async (sessionId, messageId, maxLength = NOTIFICATION_BODY_MAX_CHARS) => {
     if (!sessionId) return '';
-
-    try {
-      const url = buildOpenCodeUrl(`/session/${encodeURIComponent(sessionId)}/message`, '');
-      const response = await fetch(`${url}?limit=5`, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          ...getOpenCodeAuthHeaders(),
-        },
-        signal: AbortSignal.timeout(3000),
-      });
-
-      if (!response.ok) return '';
-
-      const messages = await response.json().catch(() => null);
-      if (!Array.isArray(messages)) return '';
-
-      let target = null;
-      if (messageId) {
-        target = messages.find((message) => message?.info?.id === messageId && message?.info?.role === 'assistant');
-      }
-      if (!target) {
-        for (let i = messages.length - 1; i >= 0; i -= 1) {
-          const message = messages[i];
-          if (message?.info?.role === 'assistant' && message?.info?.finish === 'stop') {
-            target = message;
-            break;
-          }
-        }
-      }
-
-      if (!target || !Array.isArray(target.parts)) return '';
-
-      return extractTextFromParts(target.parts, maxLength);
-    } catch {
-      return '';
-    }
+    return '';
   };
 
   const cacheSessionTitle = (sessionId, title) => {
@@ -200,28 +162,7 @@ export const createNotificationTemplateRuntime = (deps) => {
     if (cached && Date.now() - cached.at < SESSION_INFO_CACHE_TTL_MS) {
       return cached.data;
     }
-
-    try {
-      const url = buildOpenCodeUrl(`/session/${encodeURIComponent(sessionId)}`, '');
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(2000),
-      });
-      if (!response.ok) {
-        console.warn(`[Notification] fetchSessionInfo: ${response.status} for session ${sessionId}`);
-        return null;
-      }
-      const data = await response.json().catch(() => null);
-      if (data && typeof data === 'object') {
-        sessionInfoCache.set(sessionId, { data, at: Date.now() });
-        return data;
-      }
-      return null;
-    } catch (error) {
-      console.warn(`[Notification] fetchSessionInfo failed for ${sessionId}:`, error?.message || error);
-      return null;
-    }
+    return null;
   };
 
   const buildTemplateVariables = async (payload, sessionId) => {

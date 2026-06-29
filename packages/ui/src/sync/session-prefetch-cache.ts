@@ -1,6 +1,6 @@
 /**
  * Session prefetch TTL cache — prevents redundant session fetches
- * within a short window. Port of OpenCode's session-prefetch.ts.
+ * within a short window. Port of Codex's session-prefetch.ts.
  *
  * Tracks: last fetch time, pagination cursor, completeness.
  * Version counter invalidates stale inflight requests after eviction.

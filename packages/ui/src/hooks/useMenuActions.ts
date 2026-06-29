@@ -9,7 +9,6 @@ import { useUpdateStore } from '@/stores/useUpdateStore';
 import { useThemeSystem } from '@/contexts/useThemeSystem';
 import { sessionEvents } from '@/lib/sessionEvents';
 import { createWorktreeSession } from '@/lib/worktreeSessionCreator';
-import { showOpenCodeStatus } from '@/lib/openCodeStatus';
 
 const getActiveElementSelectedText = (): string => {
   if (typeof document === 'undefined') {
@@ -288,12 +287,6 @@ export const useMenuActions = (
           toggleHelpDialog();
           break;
 
-        case 'download-logs': {
-          void showOpenCodeStatus().catch(() => {
-            toast.error('Failed to collect OpenCode status');
-          });
-          break;
-        }
       }
     },
     [

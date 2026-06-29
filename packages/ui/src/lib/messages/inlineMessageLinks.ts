@@ -3,7 +3,7 @@ const AGENT_LINK_PREFIX = '#openchamber-agent:';
 
 export const buildAgentMentionUrl = (name: string): string => {
     const encoded = encodeURIComponent(name);
-    return `https://opencode.ai/docs/agents/#${encoded}`;
+    return `https://developers.openai.com/codex#${encoded}`;
 };
 
 export const buildSkillHref = (name: string): string => `${SKILL_LINK_PREFIX}${encodeURIComponent(name)}`;

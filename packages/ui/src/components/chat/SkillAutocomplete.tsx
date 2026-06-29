@@ -120,7 +120,7 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
 
   const renderSkill = (skill: SkillInfo, index: number) => {
     const isProject = skill.scope === 'project';
-    const source = skill.source || 'opencode';
+    const source = skill.source || 'codex';
     return (
       <div
         key={`${skill.name}-${skill.scope}`}

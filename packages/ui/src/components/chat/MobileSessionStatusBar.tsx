@@ -4,7 +4,7 @@ import { useAllSessionStatuses, useAllLiveSessions } from '@/sync/sync-context';
 import { mergeLiveSessionWithGlobalSession, useGlobalSessionsStore, ensureGlobalSessionsLoaded, refreshGlobalSessions } from '@/stores/useGlobalSessionsStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import type { ProjectEntry } from '@/lib/api/types';
 import { cn, formatDirectoryName } from '@/lib/utils';
 import { PROJECT_ICON_MAP, PROJECT_COLOR_MAP, ProjectIconImage } from '@/lib/projectMeta';

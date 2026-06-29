@@ -5,7 +5,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import yaml from 'yaml';
 
-import { discoverSkills } from './opencodeConfig';
+import { discoverSkills } from './codexConfig';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,7 +15,7 @@ const DEFAULT_MAX_BUFFER = 4 * 1024 * 1024;
 const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
 
 type SkillScope = 'user' | 'project';
-type SkillInstallSource = 'opencode' | 'agents';
+type SkillInstallSource = 'codex' | 'agents';
 
 export type SkillsCatalogSourceConfig = {
   id: string;
@@ -476,7 +476,7 @@ export async function scanSkillsRepository(options: { source: string; subpath?: 
 
       const installable = validateSkillName(skillName);
       if (!installable) {
-        warnings.push('Skill directory name is not a valid OpenCode skill name');
+        warnings.push('Skill directory name is not a valid Codex skill name');
       }
 
       items.push({
@@ -545,8 +545,9 @@ async function copyDirectoryNoSymlinks(srcDir: string, dstDir: string) {
 }
 
 function getUserSkillBaseDir() {
-  const pluralPath = path.join(os.homedir(), '.config', 'opencode', 'skills');
-  const legacyPath = path.join(os.homedir(), '.config', 'opencode', 'skill');
+  const codexHome = process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : path.join(os.homedir(), '.codex');
+  const pluralPath = path.join(codexHome, 'skills');
+  const legacyPath = path.join(codexHome, 'skill');
   if (fs.existsSync(legacyPath) && !fs.existsSync(pluralPath)) return legacyPath;
   return pluralPath;
 }
@@ -586,7 +587,7 @@ export async function installSkillsFromRepository(options: {
   }
 
   const userSkillDir = getUserSkillBaseDir();
-  const targetSource: SkillInstallSource = options.targetSource === 'agents' ? 'agents' : 'opencode';
+  const targetSource: SkillInstallSource = options.targetSource === 'agents' ? 'agents' : 'codex';
 
   const skillPlans = requestedDirs.map((dir) => {
     const skillName = path.posix.basename(dir);
@@ -602,7 +603,7 @@ export async function installSkillsFromRepository(options: {
         : path.join(userSkillDir, plan.skillName))
       : (targetSource === 'agents'
         ? path.join(options.workingDirectory as string, '.agents', 'skills', plan.skillName)
-        : path.join(options.workingDirectory as string, '.opencode', 'skills', plan.skillName));
+        : path.join(options.workingDirectory as string, '.codex', 'skills', plan.skillName));
 
     if (fs.existsSync(targetDir)) {
       const decision = options.conflictDecisions?.[plan.skillName];
@@ -661,7 +662,7 @@ export async function installSkillsFromRepository(options: {
           : path.join(userSkillDir, plan.skillName))
         : (targetSource === 'agents'
           ? path.join(options.workingDirectory as string, '.agents', 'skills', plan.skillName)
-          : path.join(options.workingDirectory as string, '.opencode', 'skills', plan.skillName));
+          : path.join(options.workingDirectory as string, '.codex', 'skills', plan.skillName));
 
       const exists = fs.existsSync(targetDir);
       let decision = options.conflictDecisions?.[plan.skillName] || null;
@@ -707,7 +708,7 @@ export async function getSkillsCatalog(
   workingDirectory?: string,
   refresh?: boolean,
   additionalSources?: SkillsCatalogSourceConfig[],
-  installedSkills?: Array<{ name: string; scope: SkillScope; source?: 'opencode' | 'agents' | 'claude' }>
+  installedSkills?: Array<{ name: string; scope: SkillScope; source?: 'codex' | 'agents' | 'claude' }>
 ) {
   const sources = [...CURATED_SOURCES, ...(Array.isArray(additionalSources) ? additionalSources : [])];
   const discovered = Array.isArray(installedSkills) ? installedSkills : discoverSkills(workingDirectory);
@@ -743,7 +744,7 @@ export async function getSkillsCatalog(
         return {
           sourceId: src.id,
           ...item,
-          installed: installed ? { isInstalled: true, scope: installed.scope, source: installed.source === 'agents' ? 'agents' : 'opencode' } : { isInstalled: false },
+          installed: installed ? { isInstalled: true, scope: installed.scope, source: installed.source === 'agents' ? 'agents' : 'codex' } : { isInstalled: false },
         };
       });
       continue;
@@ -783,7 +784,7 @@ export async function getSkillsCatalog(
       return {
         sourceId: src.id,
         ...item,
-        installed: installed ? { isInstalled: true, scope: installed.scope, source: installed.source === 'agents' ? 'agents' : 'opencode' } : { isInstalled: false },
+        installed: installed ? { isInstalled: true, scope: installed.scope, source: installed.source === 'agents' ? 'agents' : 'codex' } : { isInstalled: false },
       };
     });
   }

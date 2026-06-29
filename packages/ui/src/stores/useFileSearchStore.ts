@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { opencodeClient, type ProjectFileSearchHit } from '@/lib/opencode/client';
+import { codexRuntimeClient, type ProjectFileSearchHit } from '@/lib/codex/runtime-client';
 
 const CACHE_TTL_MS = 30_000;
 const MAX_CACHE_ENTRIES = 40;
@@ -75,7 +75,7 @@ export const useFileSearchStore = create<FileSearchStoreState>()(
           return inflight;
         }
 
-        const searchPromise = opencodeClient
+        const searchPromise = codexRuntimeClient
           .searchFiles(normalizedQuery, {
             directory: normalizedDirectory,
             limit,

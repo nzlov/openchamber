@@ -59,7 +59,7 @@ import { useFilesViewTabsStore } from '@/stores/useFilesViewTabsStore';
 import { useGitStatus } from '@/stores/useGitStore';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { buildCodeMirrorCommentWidgets, normalizeLineRange, useInlineCommentController } from '@/components/comments';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { useDirectoryShowHidden } from '@/lib/directoryShowHidden';
 import { useFilesViewShowGitignored } from '@/lib/filesViewShowGitignored';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
@@ -567,9 +567,9 @@ const FileRow: React.FC<FileRowProps> = ({
             onOpenChange={(open) => setContextMenuPath(open ? node.path : null)}
           >
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="size-6"
                 onClick={handleMenuButtonClick}
               >
@@ -1175,7 +1175,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full' }) => {
         path: entry.path,
         isDirectory: entry.isDirectory,
       })))
-      : opencodeClient.listLocalDirectory(normalizedDir).then((result) => result.map((entry) => ({
+      : codexRuntimeClient.listLocalDirectory(normalizedDir).then((result) => result.map((entry) => ({
         name: entry.name,
         path: entry.path,
         isDirectory: entry.isDirectory,
@@ -2192,7 +2192,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full' }) => {
   const getFileStatus = React.useCallback((path: string): FileStatus | null => {
     // Check open status
     if (openPaths.includes(path)) return 'open';
-    
+
     // Check git status
     if (gitStatus?.files) {
       const relative = path.startsWith(root + '/') ? path.slice(root.length + 1) : path;
@@ -2210,7 +2210,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full' }) => {
     if (!gitStatus?.files) return null;
     const relativeDir = dirPath.startsWith(root + '/') ? dirPath.slice(root.length + 1) : dirPath;
     const prefix = relativeDir ? `${relativeDir}/` : '';
-    
+
     let modified = 0, added = 0;
     for (const f of gitStatus.files) {
       if (f.path.startsWith(prefix)) {

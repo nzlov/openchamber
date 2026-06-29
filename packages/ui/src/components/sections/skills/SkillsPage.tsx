@@ -139,7 +139,7 @@ const SkillsInstalledPage: React.FC = () => {
 
   const [draftName, setDraftName] = React.useState('');
   const [draftScope, setDraftScope] = React.useState<SkillScope>('user');
-  const [draftSource, setDraftSource] = React.useState<'opencode' | 'agents'>('opencode');
+  const [draftSource, setDraftSource] = React.useState<'codex' | 'agents'>('codex');
   const [description, setDescription] = React.useState('');
   const [instructions, setInstructions] = React.useState('');
   const [skillMarkdown, setSkillMarkdown] = React.useState(() => buildSkillMarkdown('', ''));
@@ -171,8 +171,8 @@ const SkillsInstalledPage: React.FC = () => {
 
   const locationLabelText = React.useCallback((value: SkillLocationValue) => {
     switch (value) {
-      case 'project-opencode':
-        return t('settings.skills.location.option.projectOpencode.label');
+      case 'project-codex':
+        return t('settings.skills.location.option.projectCodex.label');
       case 'user-claude':
         return t('settings.skills.location.option.userClaude.label');
       case 'project-claude':
@@ -182,14 +182,14 @@ const SkillsInstalledPage: React.FC = () => {
       case 'project-agents':
         return t('settings.skills.location.option.projectAgents.label');
       default:
-        return t('settings.skills.location.option.userOpencode.label');
+        return t('settings.skills.location.option.userCodex.label');
     }
   }, [t]);
 
   const locationDescriptionText = React.useCallback((value: SkillLocationValue) => {
     switch (value) {
-      case 'project-opencode':
-        return t('settings.skills.location.option.projectOpencode.description');
+      case 'project-codex':
+        return t('settings.skills.location.option.projectCodex.description');
       case 'user-claude':
         return t('settings.skills.location.option.userClaude.description');
       case 'project-claude':
@@ -199,7 +199,7 @@ const SkillsInstalledPage: React.FC = () => {
       case 'project-agents':
         return t('settings.skills.location.option.projectAgents.description');
       default:
-        return t('settings.skills.location.option.userOpencode.description');
+        return t('settings.skills.location.option.userCodex.description');
     }
   }, [t]);
 
@@ -210,7 +210,7 @@ const SkillsInstalledPage: React.FC = () => {
         const nextInstructions = skillDraft.instructions || '';
         setDraftName(skillDraft.name || '');
         setDraftScope(skillDraft.scope || 'user');
-        setDraftSource(skillDraft.source === 'agents' ? 'agents' : 'opencode');
+        setDraftSource(skillDraft.source === 'agents' ? 'agents' : 'codex');
         setDescription(nextDescription);
         setInstructions(nextInstructions);
         setSkillMarkdown(buildSkillMarkdown(nextDescription, nextInstructions));
@@ -546,7 +546,7 @@ const SkillsInstalledPage: React.FC = () => {
                     onValueChange={(v) => {
                       const next = locationPartsFrom(v as SkillLocationValue);
                       setDraftScope(next.scope);
-                      setDraftSource(next.source === 'agents' ? 'agents' : 'opencode');
+                      setDraftSource(next.source === 'agents' ? 'agents' : 'codex');
                     }}
                   >
                     <SelectTrigger className="w-fit gap-1.5">

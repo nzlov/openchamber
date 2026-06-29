@@ -5,12 +5,11 @@ import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import http from 'http';
-import net from 'net';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import crypto from 'crypto';
 import { createUiAuth } from './lib/ui-auth/ui-auth.js';
-import { createTunnelAuth } from './lib/opencode/tunnel-auth.js';
+import { createTunnelAuth } from './lib/openchamber-runtime/tunnel-auth.js';
 import { createManagedTunnelConfigRuntime } from './lib/tunnels/managed-config.js';
 import { createTunnelProviderRegistry } from './lib/tunnels/registry.js';
 import { createCloudflareTunnelProvider } from './lib/tunnels/providers/cloudflare.js';
@@ -39,48 +38,40 @@ import { detectSayTtsCapability } from './lib/tts/capability-runtime.js';
 import { createTerminalRuntime } from './lib/terminal/runtime.js';
 import {
   createGlobalUiEventBroadcaster,
-  createGlobalMessageStreamHub,
-  createMessageStreamWsRuntime,
-  DEFAULT_UPSTREAM_STALL_TIMEOUT_MS,
-  UPSTREAM_STALL_TIMEOUT_CONCURRENT_MS,
 } from './lib/event-stream/index.js';
 import { createFsSearchRuntime as createFsSearchRuntimeFactory } from './lib/fs/search.js';
-import { createOpenCodeLifecycleRuntime } from './lib/opencode/lifecycle.js';
-import { createOpenCodeEnvRuntime } from './lib/opencode/env-runtime.js';
-import { resolveOpenCodeEnvConfig } from './lib/opencode/env-config.js';
-import { createHmrStateRuntime } from './lib/opencode/hmr-state-runtime.js';
-import { createOpenCodeNetworkRuntime } from './lib/opencode/network-runtime.js';
-import { createOpenCodeAuthStateRuntime } from './lib/opencode/auth-state-runtime.js';
-import { createProjectDirectoryRuntime } from './lib/opencode/project-directory-runtime.js';
-import { createSettingsNormalizationRuntime } from './lib/opencode/settings-normalization-runtime.js';
-import { createSettingsHelpers } from './lib/opencode/settings-helpers.js';
-import { createThemeRuntime } from './lib/opencode/theme-runtime.js';
-import { createFeatureRoutesRuntime } from './lib/opencode/feature-routes-runtime.js';
-import { parseServeCliOptions } from './lib/opencode/cli-options.js';
+import { createToolchainEnvRuntime } from './lib/openchamber-runtime/env-runtime.js';
+import { createHmrStateRuntime } from './lib/openchamber-runtime/hmr-state-runtime.js';
+import { createProjectDirectoryRuntime } from './lib/openchamber-runtime/project-directory-runtime.js';
+import { createSettingsNormalizationRuntime } from './lib/openchamber-runtime/settings-normalization-runtime.js';
+import { createSettingsHelpers } from './lib/openchamber-runtime/settings-helpers.js';
+import { createThemeRuntime } from './lib/openchamber-runtime/theme-runtime.js';
+import { createFeatureRoutesRuntime } from './lib/openchamber-runtime/feature-routes-runtime.js';
+import { parseServeCliOptions } from './lib/openchamber-runtime/cli-options.js';
 import {
   registerAuthAndAccessRoutes,
   registerCommonRequestMiddleware,
   registerServerStatusRoutes,
-} from './lib/opencode/core-routes.js';
-import { registerOpenChamberRoutes } from './lib/opencode/openchamber-routes.js';
-import { createServerUtilsRuntime } from './lib/opencode/server-utils-runtime.js';
-import { createStaticRoutesRuntime } from './lib/opencode/static-routes-runtime.js';
-import { createSettingsRuntime } from './lib/opencode/settings-runtime.js';
-import { createOpenCodeResolutionRuntime } from './lib/opencode/opencode-resolution-runtime.js';
-import { createBootstrapRuntime } from './lib/opencode/bootstrap-runtime.js';
-import { createSessionRuntime } from './lib/opencode/session-runtime.js';
-import { createOpenCodeWatcherRuntime } from './lib/opencode/watcher.js';
+} from './lib/openchamber-runtime/core-routes.js';
+import { registerOpenChamberRoutes } from './lib/openchamber-runtime/openchamber-routes.js';
+import { createServerUtilsRuntime } from './lib/openchamber-runtime/server-utils-runtime.js';
+import { createStaticRoutesRuntime } from './lib/openchamber-runtime/static-routes-runtime.js';
+import { createSettingsRuntime } from './lib/openchamber-runtime/settings-runtime.js';
+import { createBootstrapRuntime } from './lib/openchamber-runtime/bootstrap-runtime.js';
+import { createSessionRuntime } from './lib/openchamber-runtime/session-runtime.js';
 import { createScheduledTasksRuntime } from './lib/scheduled-tasks/runtime.js';
-import { createServerStartupRuntime } from './lib/opencode/server-startup-runtime.js';
-import { createTunnelWiringRuntime } from './lib/opencode/tunnel-wiring-runtime.js';
-import { createStartupPipelineRuntime } from './lib/opencode/startup-pipeline-runtime.js';
-import { runCliEntryIfMain } from './lib/opencode/cli-entry-runtime.js';
+import { createServerStartupRuntime } from './lib/openchamber-runtime/server-startup-runtime.js';
+import { createTunnelWiringRuntime } from './lib/openchamber-runtime/tunnel-wiring-runtime.js';
+import { createStartupPipelineRuntime } from './lib/openchamber-runtime/startup-pipeline-runtime.js';
+import { runCliEntryIfMain } from './lib/openchamber-runtime/cli-entry-runtime.js';
 import { registerNotificationRoutes } from './lib/notifications/routes.js';
+import { createCodexProcessRuntime } from './lib/codex/process-runtime.js';
+import { registerCodexRoutes } from './lib/codex/routes.js';
 import { createNotificationEmitterRuntime } from './lib/notifications/emitter-runtime.js';
 import { createNotificationTriggerRuntime } from './lib/notifications/runtime.js';
 import { createPushRuntime } from './lib/notifications/push-runtime.js';
 import { createNotificationTemplateRuntime } from './lib/notifications/template-runtime.js';
-import { createGracefulShutdownRuntime } from './lib/opencode/shutdown-runtime.js';
+import { createGracefulShutdownRuntime } from './lib/openchamber-runtime/shutdown-runtime.js';
 import { createProjectConfigRuntime } from './lib/projects/project-config.js';
 import { createRemoteClientAuthRuntime } from './lib/client-auth/remote-clients.js';
 import { createPreviewProxyRuntime } from './lib/preview/proxy-runtime.js';
@@ -100,8 +91,6 @@ const SHUTDOWN_TIMEOUT = 10000;
 const MODELS_DEV_API_URL = 'https://models.dev/api.json';
 const MODELS_METADATA_CACHE_TTL = 5 * 60 * 1000;
 const CLIENT_RELOAD_DELAY_MS = 800;
-const OPEN_CODE_READY_GRACE_MS = 12000;
-const LONG_REQUEST_TIMEOUT_MS = 4 * 60 * 1000;
 const TUNNEL_BOOTSTRAP_TTL_DEFAULT_MS = 30 * 60 * 1000;
 const TUNNEL_BOOTSTRAP_TTL_MIN_MS = 60 * 1000;
 const TUNNEL_BOOTSTRAP_TTL_MAX_MS = 24 * 60 * 60 * 1000;
@@ -132,6 +121,7 @@ function headerIncludesEventStream(value) {
  */
 const SSE_PATH_PREFIXES = [
   '/api/event',
+  '/api/codex/events',
   '/api/global/event',
   '/api/notifications/stream',
   '/api/openchamber/events',
@@ -196,8 +186,8 @@ const shouldSkipApiCompression = () => {
 const OPENCHAMBER_VERBOSE_REQUEST_LOGS = isEnvFlagEnabled(process.env.OPENCHAMBER_VERBOSE_REQUEST_LOGS);
 
 const PLAN_MODE_EXPERIMENT_ENABLED =
-  isEnvFlagEnabled(process.env.OPENCODE_EXPERIMENTAL_PLAN_MODE)
-  || isEnvFlagEnabled(process.env.OPENCODE_EXPERIMENTAL);
+  isEnvFlagEnabled(process.env.CODEX_EXPERIMENTAL_PLAN_MODE)
+  || isEnvFlagEnabled(process.env.CODEX_EXPERIMENTAL);
 
 const fsPromises = fs.promises;
 
@@ -260,7 +250,6 @@ const fetchFreeZenModels = (...args) => notificationTemplateRuntime.fetchFreeZen
 const extractTextFromParts = (...args) => notificationTemplateRuntime.extractTextFromParts(...args);
 const extractLastMessageText = (...args) => notificationTemplateRuntime.extractLastMessageText(...args);
 const fetchLastAssistantMessageText = (...args) => notificationTemplateRuntime.fetchLastAssistantMessageText(...args);
-const maybeCacheSessionInfoFromEvent = (...args) => notificationTemplateRuntime.maybeCacheSessionInfoFromEvent(...args);
 const buildTemplateVariables = (...args) => notificationTemplateRuntime.buildTemplateVariables(...args);
 const getCachedZenModels = (...args) => notificationTemplateRuntime.getCachedZenModels(...args);
 
@@ -409,17 +398,6 @@ const sessionRuntime = createSessionRuntime({
   broadcastEvent: broadcastGlobalUiEvent,
 });
 
-const getActiveSessionCount = () => {
-  const snapshot = sessionRuntime.getSessionActivitySnapshot();
-  return Object.values(snapshot).filter((entry) => entry.type === 'busy').length;
-};
-
-const getUpstreamStallTimeoutMs = () => (
-  getActiveSessionCount() > 1
-    ? UPSTREAM_STALL_TIMEOUT_CONCURRENT_MS
-    : DEFAULT_UPSTREAM_STALL_TIMEOUT_MS
-);
-
 const projectConfigRuntime = createProjectConfigRuntime({
   fsPromises,
   path,
@@ -427,7 +405,7 @@ const projectConfigRuntime = createProjectConfigRuntime({
 });
 
 // HMR-persistent state via globalThis
-// These values survive Vite HMR reloads to prevent zombie OpenCode processes
+// These values survive Vite HMR reloads to prevent zombie Codex processes
 const hmrStateRuntime = createHmrStateRuntime({
   globalThisLike: globalThis,
   os,
@@ -435,26 +413,14 @@ const hmrStateRuntime = createHmrStateRuntime({
   stateKey: '__openchamberHmrState',
 });
 const hmrState = hmrStateRuntime.getOrCreateHmrState();
-hmrStateRuntime.ensureUserProvidedOpenCodePassword(hmrState);
 
 // Non-HMR state (safe to reset on reload)
 let healthCheckInterval = null;
 let server = null;
 let expressApp = null;
-let currentRestartPromise = null;
-let isRestartingOpenCode = false;
-let openCodeApiPrefix = '';
-let openCodeApiPrefixDetected = true;
-let openCodeApiDetectionTimer = null;
-let lastOpenCodeError = null;
-let lastOpenCodeLaunchDiagnostics = null;
-let isOpenCodeReady = false;
-let openCodeNotReadySince = 0;
-let isExternalOpenCode = false;
 let exitOnShutdown = true;
 let uiAuthController = null;
 let activeTunnelController = null;
-let globalWatcherStartPromise = null;
 const tunnelProviderRegistry = createTunnelProviderRegistry([
   createCloudflareTunnelProvider(),
   createNgrokTunnelProvider(),
@@ -465,65 +431,18 @@ let runtimeManagedRemoteTunnelToken = '';
 let runtimeManagedRemoteTunnelHostname = '';
 let terminalRuntime = null;
 let messageStreamRuntime = null;
-const userProvidedOpenCodePassword = hmrStateRuntime.getUserProvidedOpenCodePassword(hmrState);
-const initialOpenCodeAuthState = hmrStateRuntime.resolveOpenCodeAuthFromState({
-  hmrState,
-  userProvidedOpenCodePassword,
-});
-let openCodeAuthPassword = initialOpenCodeAuthState.openCodeAuthPassword;
-let openCodeAuthSource = initialOpenCodeAuthState.openCodeAuthSource;
 
 // Sync helper - call after modifying any HMR state variable
 const syncToHmrState = () => {
-  hmrStateRuntime.syncStateFromRuntime(hmrState, {
-    openCodeProcess,
-    openCodePort,
-    openCodeBaseUrl,
-    isShuttingDown,
-    signalsAttached,
-    openCodeWorkingDirectory,
-    openCodeAuthPassword,
-    openCodeAuthSource,
-  });
-};
-
-// Sync helper - call to restore state from HMR (e.g., on module reload)
-const syncFromHmrState = () => {
-  const restored = hmrStateRuntime.restoreRuntimeFromState({
-    hmrState,
-    userProvidedOpenCodePassword,
-  });
-  openCodeProcess = restored.openCodeProcess;
-  openCodePort = restored.openCodePort;
-  openCodeBaseUrl = restored.openCodeBaseUrl;
-  isShuttingDown = restored.isShuttingDown;
-  signalsAttached = restored.signalsAttached;
-  openCodeWorkingDirectory = restored.openCodeWorkingDirectory;
-  openCodeAuthPassword = restored.openCodeAuthPassword;
-  openCodeAuthSource = restored.openCodeAuthSource;
+  hmrState.isShuttingDown = isShuttingDown;
+  hmrState.signalsAttached = signalsAttached;
 };
 
 // Module-level variables that shadow HMR state
 // These are synced to/from hmrState to survive HMR reloads
-let openCodeProcess = hmrState.openCodeProcess;
-let openCodePort = hmrState.openCodePort;
-let openCodeBaseUrl = hmrState.openCodeBaseUrl ?? null;
 let isShuttingDown = hmrState.isShuttingDown;
 let signalsAttached = hmrState.signalsAttached;
-let openCodeWorkingDirectory = hmrState.openCodeWorkingDirectory;
 
-const {
-  configuredOpenCodePort: ENV_CONFIGURED_OPENCODE_PORT,
-  configuredOpenCodeHost: ENV_CONFIGURED_OPENCODE_HOST,
-  effectivePort: ENV_EFFECTIVE_PORT,
-  configuredOpenCodeHostname: ENV_CONFIGURED_OPENCODE_HOSTNAME,
-} = resolveOpenCodeEnvConfig({
-  env: process.env,
-  logger: console,
-});
-
-const ENV_SKIP_OPENCODE_START = process.env.OPENCODE_SKIP_START === 'true' ||
-                                    process.env.OPENCHAMBER_SKIP_OPENCODE_START === 'true';
 const ENV_DESKTOP_NOTIFY = (() => {
   if (process.env.OPENCHAMBER_DESKTOP_NOTIFY === 'true') {
     return true;
@@ -537,125 +456,49 @@ const ENV_DESKTOP_NOTIFY = (() => {
   const argv1 = typeof process.argv?.[1] === 'string' ? process.argv[1] : '';
   return /openchamber-server/i.test(argv0) || /openchamber-server/i.test(argv1);
 })();
-const openCodeAuthStateRuntime = createOpenCodeAuthStateRuntime({
-  crypto,
-  process,
-  getAuthPassword: () => openCodeAuthPassword,
-  setAuthPassword: (value) => {
-    openCodeAuthPassword = value;
-  },
-  getAuthSource: () => openCodeAuthSource,
-  setAuthSource: (value) => {
-    openCodeAuthSource = value;
-  },
-  getUserProvidedPassword: () => userProvidedOpenCodePassword,
-  syncToHmrState,
-});
-
-const getOpenCodeAuthHeaders = (...args) => openCodeAuthStateRuntime.getOpenCodeAuthHeaders(...args);
-const isOpenCodeConnectionSecure = (...args) => openCodeAuthStateRuntime.isOpenCodeConnectionSecure(...args);
-const ensureLocalOpenCodeServerPassword = (...args) => openCodeAuthStateRuntime.ensureLocalOpenCodeServerPassword(...args);
-
-const openCodeNetworkState = {};
-Object.defineProperties(openCodeNetworkState, {
-  openCodePort: { get: () => openCodePort, set: (value) => { openCodePort = value; } },
-  openCodeBaseUrl: { get: () => openCodeBaseUrl, set: (value) => { openCodeBaseUrl = value; } },
-  openCodeApiPrefix: { get: () => openCodeApiPrefix, set: (value) => { openCodeApiPrefix = value; } },
-  openCodeApiPrefixDetected: { get: () => openCodeApiPrefixDetected, set: (value) => { openCodeApiPrefixDetected = value; } },
-  openCodeApiDetectionTimer: { get: () => openCodeApiDetectionTimer, set: (value) => { openCodeApiDetectionTimer = value; } },
-});
-
-const openCodeNetworkRuntime = createOpenCodeNetworkRuntime({
-  state: openCodeNetworkState,
-  getOpenCodeAuthHeaders,
-});
-
-const waitForReady = (...args) => openCodeNetworkRuntime.waitForReady(...args);
-const normalizeApiPrefix = (...args) => openCodeNetworkRuntime.normalizeApiPrefix(...args);
-const setDetectedOpenCodeApiPrefix = (...args) => openCodeNetworkRuntime.setDetectedOpenCodeApiPrefix(...args);
-const buildOpenCodeUrl = (...args) => openCodeNetworkRuntime.buildOpenCodeUrl(...args);
-const ensureOpenCodeApiPrefix = (...args) => openCodeNetworkRuntime.ensureOpenCodeApiPrefix(...args);
-const scheduleOpenCodeApiDetection = (...args) => openCodeNetworkRuntime.scheduleOpenCodeApiDetection(...args);
-
-const ENV_CONFIGURED_API_PREFIX = normalizeApiPrefix(
-  process.env.OPENCODE_API_PREFIX || process.env.OPENCHAMBER_API_PREFIX || ''
-);
-
-  if (ENV_CONFIGURED_API_PREFIX && ENV_CONFIGURED_API_PREFIX !== '') {
-  console.warn('Ignoring configured OpenCode API prefix; API runs at root.');
-}
 
 let cachedLoginShellEnvSnapshot;
-let resolvedOpencodeBinary = null;
-let resolvedOpencodeBinarySource = null;
+let resolvedCodexBinary = null;
+let resolvedCodexBinarySource = null;
 let resolvedNodeBinary = null;
 let resolvedBunBinary = null;
 let resolvedGitBinary = null;
-let useWslForOpencode = false;
+let useWslForCodex = false;
 let resolvedWslBinary = null;
-let resolvedWslOpencodePath = null;
+let resolvedWslCodexPath = null;
 let resolvedWslDistro = null;
 
-const openCodeEnvState = {};
-Object.defineProperties(openCodeEnvState, {
+const toolchainEnvState = {};
+Object.defineProperties(toolchainEnvState, {
   cachedLoginShellEnvSnapshot: { get: () => cachedLoginShellEnvSnapshot, set: (value) => { cachedLoginShellEnvSnapshot = value; } },
-  resolvedOpencodeBinary: { get: () => resolvedOpencodeBinary, set: (value) => { resolvedOpencodeBinary = value; } },
-  resolvedOpencodeBinarySource: { get: () => resolvedOpencodeBinarySource, set: (value) => { resolvedOpencodeBinarySource = value; } },
+  resolvedCodexBinary: { get: () => resolvedCodexBinary, set: (value) => { resolvedCodexBinary = value; } },
+  resolvedCodexBinarySource: { get: () => resolvedCodexBinarySource, set: (value) => { resolvedCodexBinarySource = value; } },
   resolvedNodeBinary: { get: () => resolvedNodeBinary, set: (value) => { resolvedNodeBinary = value; } },
   resolvedBunBinary: { get: () => resolvedBunBinary, set: (value) => { resolvedBunBinary = value; } },
   resolvedGitBinary: { get: () => resolvedGitBinary, set: (value) => { resolvedGitBinary = value; } },
-  useWslForOpencode: { get: () => useWslForOpencode, set: (value) => { useWslForOpencode = value; } },
+  useWslForCodex: { get: () => useWslForCodex, set: (value) => { useWslForCodex = value; } },
   resolvedWslBinary: { get: () => resolvedWslBinary, set: (value) => { resolvedWslBinary = value; } },
-  resolvedWslOpencodePath: { get: () => resolvedWslOpencodePath, set: (value) => { resolvedWslOpencodePath = value; } },
+  resolvedWslCodexPath: { get: () => resolvedWslCodexPath, set: (value) => { resolvedWslCodexPath = value; } },
   resolvedWslDistro: { get: () => resolvedWslDistro, set: (value) => { resolvedWslDistro = value; } },
 });
 
-const openCodeEnvRuntime = createOpenCodeEnvRuntime({
-  state: openCodeEnvState,
+const toolchainEnvRuntime = createToolchainEnvRuntime({
+  state: toolchainEnvState,
   normalizeDirectoryPath,
   readSettingsFromDiskMigrated,
 });
 
-const applyLoginShellEnvSnapshot = (...args) => openCodeEnvRuntime.applyLoginShellEnvSnapshot(...args);
-const getLoginShellEnvSnapshot = (...args) => openCodeEnvRuntime.getLoginShellEnvSnapshot(...args);
-const ensureOpencodeCliEnv = (...args) => openCodeEnvRuntime.ensureOpencodeCliEnv(...args);
-const applyOpencodeBinaryFromSettings = (...args) => openCodeEnvRuntime.applyOpencodeBinaryFromSettings(...args);
-const resolveOpencodeCliPath = (...args) => openCodeEnvRuntime.resolveOpencodeCliPath(...args);
-const isExecutable = (...args) => openCodeEnvRuntime.isExecutable(...args);
-const searchPathFor = (...args) => openCodeEnvRuntime.searchPathFor(...args);
-const resolveGitBinaryForSpawn = (...args) => openCodeEnvRuntime.resolveGitBinaryForSpawn(...args);
-const resolveManagedOpenCodeLaunchSpec = (...args) => openCodeEnvRuntime.resolveManagedOpenCodeLaunchSpec(...args);
-const clearResolvedOpenCodeBinary = (...args) => openCodeEnvRuntime.clearResolvedOpenCodeBinary(...args);
-const openCodeResolutionRuntime = createOpenCodeResolutionRuntime({
-  path,
-  resolveOpencodeCliPath,
-  applyOpencodeBinaryFromSettings,
-  ensureOpencodeCliEnv,
-  resolveManagedOpenCodeLaunchSpec,
-  getResolvedState: () => ({
-    resolvedOpencodeBinary,
-    resolvedOpencodeBinarySource,
-    useWslForOpencode,
-    resolvedWslBinary,
-    resolvedWslOpencodePath,
-    resolvedWslDistro,
-    resolvedNodeBinary,
-    resolvedBunBinary,
-  }),
-  setResolvedOpencodeBinarySource: (value) => {
-    resolvedOpencodeBinarySource = value;
-  },
-});
-const getOpenCodeResolutionSnapshot = (...args) =>
-  openCodeResolutionRuntime.getOpenCodeResolutionSnapshot(...args);
+const applyLoginShellEnvSnapshot = (...args) => toolchainEnvRuntime.applyLoginShellEnvSnapshot(...args);
+const getLoginShellEnvSnapshot = (...args) => toolchainEnvRuntime.getLoginShellEnvSnapshot(...args);
+const isExecutable = (...args) => toolchainEnvRuntime.isExecutable(...args);
+const searchPathFor = (...args) => toolchainEnvRuntime.searchPathFor(...args);
+const resolveGitBinaryForSpawn = (...args) => toolchainEnvRuntime.resolveGitBinaryForSpawn(...args);
 
 applyLoginShellEnvSnapshot();
 
 notificationTemplateRuntime = createNotificationTemplateRuntime({
   readSettingsFromDisk,
   persistSettings,
-  buildOpenCodeUrl,
-  getOpenCodeAuthHeaders,
   resolveGitBinaryForSpawn,
 });
 
@@ -670,84 +513,9 @@ const notificationTriggerRuntime = createNotificationTriggerRuntime({
   emitDesktopNotification,
   broadcastUiNotification,
   sendPushToAllUiSessions,
-  buildOpenCodeUrl,
-  getOpenCodeAuthHeaders,
 });
 
-const maybeSendPushForTrigger = (...args) => notificationTriggerRuntime.maybeSendPushForTrigger(...args);
 const setAutoAcceptSession = (...args) => notificationTriggerRuntime.setAutoAcceptSession(...args);
-
-const globalMessageStreamHub = createGlobalMessageStreamHub({
-  buildOpenCodeUrl,
-  getOpenCodeAuthHeaders,
-  upstreamStallTimeoutMs: getUpstreamStallTimeoutMs,
-});
-
-const openCodeWatcherRuntime = createOpenCodeWatcherRuntime({
-  waitForOpenCodePort: (...args) => waitForOpenCodePort(...args),
-  buildOpenCodeUrl,
-  getOpenCodeAuthHeaders,
-  parseSseDataPayload: (...args) => parseSseDataPayload(...args),
-  globalEventHub: globalMessageStreamHub,
-  onPayload: (payload) => {
-    maybeCacheSessionInfoFromEvent(payload);
-    void maybeSendPushForTrigger(payload);
-    sessionRuntime.processOpenCodeSsePayload(payload);
-  },
-});
-
-const processForwardedEventPayload = (payload, emitSyntheticEvent) => {
-  if (!payload || typeof payload !== 'object' || typeof emitSyntheticEvent !== 'function') {
-    return;
-  }
-
-  maybeCacheSessionInfoFromEvent(payload);
-
-  if (payload.type !== 'session.status') {
-    return;
-  }
-
-  const properties = payload.properties && typeof payload.properties === 'object' ? payload.properties : {};
-  const statusInfo = properties.status && typeof properties.status === 'object' ? properties.status : {};
-  const info = properties.info && typeof properties.info === 'object' ? properties.info : {};
-  const sessionId = typeof properties.sessionID === 'string' ? properties.sessionID.trim() : '';
-  const status = typeof statusInfo.type === 'string'
-    ? statusInfo.type.trim()
-    : (typeof info.type === 'string' ? info.type.trim() : '');
-
-  if (!sessionId || !status) {
-    return;
-  }
-
-  emitSyntheticEvent({
-    type: 'openchamber:session-status',
-    properties: {
-      sessionID: sessionId,
-      status,
-      timestamp: Date.now(),
-      metadata: {
-        attempt: typeof statusInfo.attempt === 'number'
-          ? statusInfo.attempt
-          : (typeof info.attempt === 'number' ? info.attempt : undefined),
-        message: typeof statusInfo.message === 'string'
-          ? statusInfo.message
-          : (typeof info.message === 'string' ? info.message : undefined),
-        next: typeof statusInfo.next === 'number'
-          ? statusInfo.next
-          : (typeof info.next === 'number' ? info.next : undefined),
-      },
-      needsAttention: false,
-    },
-  });
-
-  emitSyntheticEvent({
-    type: 'openchamber:session-activity',
-    properties: {
-      sessionId,
-      phase: status === 'busy' || status === 'retry' ? 'busy' : 'idle',
-    },
-  });
-};
 
 
 const serverUtilsRuntime = createServerUtilsRuntime({
@@ -755,33 +523,6 @@ const serverUtilsRuntime = createServerUtilsRuntime({
   os,
   path,
   process,
-  openCodeReadyGraceMs: OPEN_CODE_READY_GRACE_MS,
-  longRequestTimeoutMs: LONG_REQUEST_TIMEOUT_MS,
-  getRuntime: () => ({
-    openCodePort,
-    openCodeBaseUrl,
-    openCodeNotReadySince,
-    isOpenCodeReady,
-    isRestartingOpenCode,
-  }),
-  getOpenCodeAuthHeaders,
-  buildOpenCodeUrl,
-  ensureOpenCodeApiPrefix,
-  getUiNotificationClients: () => uiNotificationClients,
-  getOpenCodePort: () => openCodePort,
-  setOpenCodePortState: (value) => {
-    openCodePort = value;
-  },
-  syncToHmrState,
-  markOpenCodeNotReady: () => {
-    isOpenCodeReady = false;
-  },
-  setOpenCodeNotReadySince: (value) => {
-    openCodeNotReadySince = value;
-  },
-  clearLastOpenCodeError: () => {
-    lastOpenCodeError = null;
-  },
   getLoginShellPath: () => {
     const snapshot = getLoginShellEnvSnapshot();
     if (!snapshot || typeof snapshot.PATH !== 'string' || snapshot.PATH.length === 0) {
@@ -791,20 +532,13 @@ const serverUtilsRuntime = createServerUtilsRuntime({
   },
 });
 
-const setOpenCodePort = (...args) => serverUtilsRuntime.setOpenCodePort(...args);
-const waitForOpenCodePort = (...args) => serverUtilsRuntime.waitForOpenCodePort(...args);
 const buildAugmentedPath = (...args) => serverUtilsRuntime.buildAugmentedPath(...args);
-const buildManagedOpenCodePath = (...args) => serverUtilsRuntime.buildManagedOpenCodePath(...args);
-const parseSseDataPayload = (...args) => serverUtilsRuntime.parseSseDataPayload(...args);
 const staticRoutesRuntime = createStaticRoutesRuntime({
   fs,
   path,
   process,
   __dirname,
   express,
-  resolveProjectDirectory,
-  buildOpenCodeUrl,
-  getOpenCodeAuthHeaders,
   readSettingsFromDiskMigrated,
   normalizePwaAppName,
   normalizePwaOrientation,
@@ -817,6 +551,11 @@ const remoteClientAuthRuntime = createRemoteClientAuthRuntime({
 });
 const featureRoutesRuntime = createFeatureRoutesRuntime({
   clientReloadDelayMs: CLIENT_RELOAD_DELAY_MS,
+});
+const codexProcessRuntime = createCodexProcessRuntime({
+  spawn,
+  processLike: process,
+  logger: console,
 });
 const bootstrapRuntime = createBootstrapRuntime({
   createUiAuth,
@@ -864,80 +603,24 @@ const tunnelWiringRuntime = createTunnelWiringRuntime({
 });
 const startupPipelineRuntime = createStartupPipelineRuntime({
   createTerminalRuntime,
-  createMessageStreamWsRuntime,
   createServerStartupRuntime,
 });
 
-const openCodeLifecycleState = {};
-Object.defineProperties(openCodeLifecycleState, {
-  openCodeProcess: { get: () => openCodeProcess, set: (value) => { openCodeProcess = value; } },
-  openCodePort: { get: () => openCodePort, set: (value) => { openCodePort = value; } },
-  openCodeBaseUrl: { get: () => openCodeBaseUrl, set: (value) => { openCodeBaseUrl = value; } },
-  openCodeWorkingDirectory: { get: () => openCodeWorkingDirectory, set: (value) => { openCodeWorkingDirectory = value; } },
-  currentRestartPromise: { get: () => currentRestartPromise, set: (value) => { currentRestartPromise = value; } },
-  isRestartingOpenCode: { get: () => isRestartingOpenCode, set: (value) => { isRestartingOpenCode = value; } },
-  openCodeApiPrefix: { get: () => openCodeApiPrefix, set: (value) => { openCodeApiPrefix = value; } },
-  openCodeApiPrefixDetected: { get: () => openCodeApiPrefixDetected, set: (value) => { openCodeApiPrefixDetected = value; } },
-  openCodeApiDetectionTimer: { get: () => openCodeApiDetectionTimer, set: (value) => { openCodeApiDetectionTimer = value; } },
-  lastOpenCodeError: { get: () => lastOpenCodeError, set: (value) => { lastOpenCodeError = value; } },
-  lastOpenCodeLaunchDiagnostics: { get: () => lastOpenCodeLaunchDiagnostics, set: (value) => { lastOpenCodeLaunchDiagnostics = value; } },
-  isOpenCodeReady: { get: () => isOpenCodeReady, set: (value) => { isOpenCodeReady = value; } },
-  openCodeNotReadySince: { get: () => openCodeNotReadySince, set: (value) => { openCodeNotReadySince = value; } },
-  isExternalOpenCode: { get: () => isExternalOpenCode, set: (value) => { isExternalOpenCode = value; } },
-  isShuttingDown: { get: () => isShuttingDown, set: (value) => { isShuttingDown = value; } },
-  healthCheckInterval: { get: () => healthCheckInterval, set: (value) => { healthCheckInterval = value; } },
-  expressApp: { get: () => expressApp, set: (value) => { expressApp = value; } },
-  useWslForOpencode: { get: () => useWslForOpencode, set: (value) => { useWslForOpencode = value; } },
-  resolvedWslBinary: { get: () => resolvedWslBinary, set: (value) => { resolvedWslBinary = value; } },
-  resolvedWslOpencodePath: { get: () => resolvedWslOpencodePath, set: (value) => { resolvedWslOpencodePath = value; } },
-  resolvedWslDistro: { get: () => resolvedWslDistro, set: (value) => { resolvedWslDistro = value; } },
-});
-
-const openCodeLifecycleRuntime = createOpenCodeLifecycleRuntime({
-  state: openCodeLifecycleState,
-  env: {
-    ENV_CONFIGURED_OPENCODE_PORT,
-    ENV_CONFIGURED_OPENCODE_HOST,
-    ENV_EFFECTIVE_PORT,
-    ENV_CONFIGURED_OPENCODE_HOSTNAME,
-    ENV_SKIP_OPENCODE_START,
-  },
-  syncToHmrState,
-  syncFromHmrState,
-  getOpenCodeAuthHeaders,
-  buildOpenCodeUrl,
-  waitForReady,
-  normalizeApiPrefix,
-  applyOpencodeBinaryFromSettings,
-  ensureOpencodeCliEnv,
-  ensureLocalOpenCodeServerPassword,
-  resolveManagedOpenCodeLaunchSpec,
-  setOpenCodePort,
-  setDetectedOpenCodeApiPrefix,
-  setupProxy: (...args) => setupProxy(...args),
-  ensureOpenCodeApiPrefix,
-  clearResolvedOpenCodeBinary,
-  buildAugmentedPath,
-  buildManagedOpenCodePath,
-  getManagedOpenCodeShellEnvSnapshot: getLoginShellEnvSnapshot,
-  getActiveSessionCount,
-});
-
-const restartOpenCode = (...args) => openCodeLifecycleRuntime.restartOpenCode(...args);
-const waitForOpenCodeReady = (...args) => openCodeLifecycleRuntime.waitForOpenCodeReady(...args);
-const waitForAgentPresence = (...args) => openCodeLifecycleRuntime.waitForAgentPresence(...args);
-const refreshOpenCodeAfterConfigChange = (...args) => openCodeLifecycleRuntime.refreshOpenCodeAfterConfigChange(...args);
-const startHealthMonitoring = () => openCodeLifecycleRuntime.startHealthMonitoring(HEALTH_CHECK_INTERVAL);
-const triggerHealthCheck = () => openCodeLifecycleRuntime.triggerHealthCheck();
+const refreshCodexAfterConfigChange = async (reason) => {
+  const health = codexProcessRuntime.getHealthSnapshot();
+  if (!health.running) {
+    return;
+  }
+  console.log(`Restarting Codex runtime after ${reason}`);
+  await codexProcessRuntime.restart();
+};
 const scheduledTasksRuntime = createScheduledTasksRuntime({
   projectConfigRuntime,
   listProjects: async () => {
     const settings = await readSettingsFromDiskMigrated();
     return sanitizeProjects(settings?.projects || []);
   },
-  buildOpenCodeUrl,
-  getOpenCodeAuthHeaders,
-  waitForOpenCodeReady,
+  codexProcessRuntime,
   emitTaskRunEvent: (event) => {
     for (const client of uiOpenChamberEventClients) {
       try {
@@ -959,37 +642,6 @@ const scheduledTasksRuntime = createScheduledTasksRuntime({
   logger: console,
 });
 
-const ensureGlobalWatcherStarted = async () => {
-  if (globalWatcherStartPromise) {
-    return globalWatcherStartPromise;
-  }
-
-  globalWatcherStartPromise = openCodeWatcherRuntime.start().catch((error) => {
-    globalWatcherStartPromise = null;
-    throw error;
-  });
-
-  return globalWatcherStartPromise;
-};
-const bootstrapOpenCodeAtStartup = async (...args) => {
-  await openCodeLifecycleRuntime.bootstrapOpenCodeAtStartup(...args);
-  scheduleOpenCodeApiDetection();
-  if (openCodeLifecycleState.openCodeProcess && !openCodeLifecycleState.isExternalOpenCode) {
-    startHealthMonitoring();
-  }
-  if (ENV_DESKTOP_NOTIFY) {
-    void ensureGlobalWatcherStarted().catch((error) => {
-      console.warn(`Global event watcher startup failed: ${error?.message || error}`);
-    });
-  }
-};
-const killProcessOnPort = (...args) => openCodeLifecycleRuntime.killProcessOnPort(...args);
-const waitForPortRelease = (...args) => openCodeLifecycleRuntime.waitForPortRelease(...args);
-
-const fetchAgentsSnapshot = (...args) => serverUtilsRuntime.fetchAgentsSnapshot(...args);
-const fetchProvidersSnapshot = (...args) => serverUtilsRuntime.fetchProvidersSnapshot(...args);
-const fetchModelsSnapshot = (...args) => serverUtilsRuntime.fetchModelsSnapshot(...args);
-const setupProxy = (...args) => serverUtilsRuntime.setupProxy(...args);
 const gracefulShutdownRuntime = createGracefulShutdownRuntime({
   process,
   shutdownTimeoutMs: SHUTDOWN_TIMEOUT,
@@ -999,8 +651,8 @@ const gracefulShutdownRuntime = createGracefulShutdownRuntime({
     isShuttingDown = value;
   },
   syncToHmrState,
-  openCodeWatcherRuntime,
   sessionRuntime,
+  getCodexProcessRuntime: () => codexProcessRuntime,
   getHealthCheckInterval: () => healthCheckInterval,
   clearHealthCheckInterval: (value) => clearInterval(value),
   getTerminalRuntime: () => terminalRuntime,
@@ -1011,14 +663,6 @@ const gracefulShutdownRuntime = createGracefulShutdownRuntime({
   setMessageStreamRuntime: (value) => {
     messageStreamRuntime = value;
   },
-  shouldSkipOpenCodeStop: () => ENV_SKIP_OPENCODE_START || isExternalOpenCode,
-  getOpenCodePort: () => openCodePort,
-  getOpenCodeProcess: () => openCodeProcess,
-  setOpenCodeProcess: (value) => {
-    openCodeProcess = value;
-  },
-  killProcessOnPort,
-  waitForPortRelease,
   getServer: () => server,
   getUiAuthController: () => uiAuthController,
   setUiAuthController: (value) => {
@@ -1113,7 +757,7 @@ async function main(options = {}) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With,Cache-Control,X-OpenCode-Directory');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With,Cache-Control,X-OpenChamber-Directory,X-OpenChamber-Directory-Encoding');
       res.setHeader('Access-Control-Expose-Headers', 'x-next-cursor');
       res.setHeader('Vary', 'Origin');
       if (req.method === 'OPTIONS') {
@@ -1140,28 +784,11 @@ async function main(options = {}) {
     serverStartedAt,
     gracefulShutdown,
     getHealthSnapshot: () => {
-      const launchSpec = resolvedOpencodeBinary && !useWslForOpencode
-        ? resolveManagedOpenCodeLaunchSpec(resolvedOpencodeBinary)
-        : null;
+      const codexHealth = codexProcessRuntime.getHealthSnapshot();
       return {
-        openCodePort,
-        openCodeRunning: Boolean(openCodePort && isOpenCodeReady && !isRestartingOpenCode),
-        openCodeSecureConnection: isOpenCodeConnectionSecure(),
-        openCodeAuthSource: openCodeAuthSource || null,
-        openCodeApiPrefix: '',
-        openCodeApiPrefixDetected: true,
-        isOpenCodeReady,
-        lastOpenCodeError,
-        lastOpenCodeLaunchDiagnostics,
-        opencodeBinaryResolved: resolvedOpencodeBinary || null,
-        opencodeBinarySource: resolvedOpencodeBinarySource || null,
-        opencodeLaunchBinary: launchSpec?.binary || null,
-        opencodeLaunchArgs: launchSpec?.args || [],
-        opencodeLaunchWrapperType: launchSpec?.wrapperType || null,
-        opencodeViaWsl: useWslForOpencode,
-        opencodeWslBinary: resolvedWslBinary || null,
-        opencodeWslPath: resolvedWslOpencodePath || null,
-        opencodeWslDistro: resolvedWslDistro || null,
+        codexRunning: codexHealth.running,
+        codexReady: codexHealth.initialized,
+        codex: codexHealth,
         nodeBinaryResolved: resolvedNodeBinary || null,
         bunBinaryResolved: resolvedBunBinary || null,
         desktopNotifyEnabled: ENV_DESKTOP_NOTIFY,
@@ -1177,7 +804,7 @@ async function main(options = {}) {
     normalizeTunnelSessionTtlMs,
     sayTTSCapability,
     ensurePushInitialized,
-    ensureGlobalWatcherStarted,
+    ensureGlobalWatcherStarted: null,
     getOrCreateVapidKeys,
     getUiSessionTokenFromRequest,
     writeSettingsToDisk,
@@ -1203,6 +830,8 @@ async function main(options = {}) {
   });
   uiAuthController = bootstrapResult.uiAuthController;
 
+  registerCodexRoutes(app, { codexProcessRuntime, express });
+
   const tunnelRuntimeContext = tunnelWiringRuntime.initialize(app, port);
   const { tunnelService, startTunnelWithNormalizedRequest } = tunnelRuntimeContext;
 
@@ -1222,8 +851,7 @@ async function main(options = {}) {
     resolveOptionalProjectDirectory,
     validateDirectoryPath,
     readCustomThemesFromDisk,
-    refreshOpenCodeAfterConfigChange,
-    getOpenCodeResolutionSnapshot,
+    refreshRuntimeAfterConfigChange: refreshCodexAfterConfigChange,
     formatSettingsResponse,
     readSettingsFromDisk,
     readSettingsFromDiskMigrated,
@@ -1231,9 +859,6 @@ async function main(options = {}) {
     sanitizeProjects,
     sanitizeSkillCatalogs,
     isUnsafeSkillRelativePath,
-    buildOpenCodeUrl,
-    getOpenCodeAuthHeaders,
-    getOpenCodePort: () => openCodePort,
     buildAugmentedPath,
     projectConfigRuntime,
     scheduledTasksRuntime,
@@ -1267,19 +892,9 @@ async function main(options = {}) {
     isExecutable,
     isRequestOriginAllowed,
     rejectWebSocketUpgrade,
-    buildOpenCodeUrl,
-    getOpenCodeAuthHeaders,
-    globalEventHub: globalMessageStreamHub,
-    processForwardedEventPayload,
-    messageStreamWsClients: uiNotificationWsClients,
-    upstreamStallTimeoutMs: getUpstreamStallTimeoutMs,
     terminalHeartbeatIntervalMs: TERMINAL_INPUT_WS_HEARTBEAT_INTERVAL_MS,
     terminalRebindWindowMs: TERMINAL_INPUT_WS_REBIND_WINDOW_MS,
     terminalMaxRebindsPerWindow: TERMINAL_INPUT_WS_MAX_REBINDS_PER_WINDOW,
-    setupProxy,
-    scheduleOpenCodeApiDetection,
-    bootstrapOpenCodeAtStartup,
-    triggerHealthCheck,
     staticRoutesRuntime,
     process,
     crypto,
@@ -1317,7 +932,6 @@ async function main(options = {}) {
     expressApp: app,
     httpServer: server,
     getPort: () => tunnelRuntimeContext.getActivePort(),
-    getOpenCodePort: () => openCodePort,
     getTunnelUrl: () => tunnelService.getPublicUrl(),
     getQuitRiskStatus: () => ({
       tunnel: {
@@ -1325,22 +939,9 @@ async function main(options = {}) {
       },
       scheduledTasks: scheduledTasksRuntime.getStatus(),
     }),
-    isReady: () => isOpenCodeReady,
-    restartOpenCode: () => restartOpenCode(),
-    getOpenCodeProcessInfo: () => {
-      const managed = Boolean((openCodeProcess || openCodePort) && !ENV_SKIP_OPENCODE_START && !isExternalOpenCode);
-      // Only ever expose pid/port for a server WE manage. The Electron-side
-      // killer kills by port (lsof + kill -KILL), so returning a port we don't
-      // own — e.g. an external/desktop OpenCode on 4096 we attached to — would
-      // let a single miscomputed `managed` flag take down the user's separate
-      // server. Structurally withhold what isn't ours so the killer has no
-      // target, instead of relying on the flag check alone.
-      return {
-        managed,
-        pid: managed && typeof openCodeProcess?.pid === 'number' ? openCodeProcess.pid : null,
-        port: managed ? openCodePort : null,
-      };
-    },
+    isReady: () => codexProcessRuntime.getHealthSnapshot().initialized === true,
+    restartCodex: () => codexProcessRuntime.restart(),
+    getCodexProcessRuntime: () => codexProcessRuntime,
     stop: (shutdownOptions = {}) =>
       gracefulShutdown({ exitProcess: shutdownOptions.exitProcess ?? false })
   };
@@ -1361,8 +962,6 @@ runCliEntryIfMain({
 
 export {
   gracefulShutdown,
-  setupProxy,
-  restartOpenCode,
   main as startWebUiServer,
   parseServeCliOptions as parseArgs,
 };

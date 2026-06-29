@@ -1,19 +1,15 @@
 import React from 'react';
-import { isDesktopShell, requestFileAccess, startDesktopWindowDrag } from '@/lib/desktop';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { isDesktopShell, startDesktopWindowDrag } from '@/lib/desktop';
 import { Icon } from "@/components/icon/Icon";
-import { updateDesktopSettings } from '@/lib/persistence';
 import { copyTextToClipboard } from '@/lib/clipboard';
-import { restartDesktopApp } from '@/lib/desktop';
 import { cn } from '@/lib/utils';
 import { RemoteConnectionForm } from './RemoteConnectionForm';
 import { desktopHostsGet, desktopHostsSet } from '@/lib/desktopHosts';
 import { useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
-const INSTALL_COMMAND = 'curl -fsSL https://opencode.ai/install | bash';
-const DOCS_URL = 'https://opencode.ai/docs';
+const INSTALL_COMMAND = 'npm install -g @openai/codex';
+const DOCS_URL = 'https://developers.openai.com/codex';
 const POLL_INTERVAL_MS = 2500;
 
 type OnboardingPlatform = 'macos' | 'linux' | 'windows' | 'unknown';
@@ -27,11 +23,9 @@ function BashCommand({ onCopy, copyTitle }: { onCopy: () => void; copyTitle: str
   return (
     <div className="flex items-center justify-between gap-3 w-full">
       <code className="flex-1 text-left overflow-x-auto whitespace-nowrap">
-        <span style={{ color: 'var(--syntax-keyword)' }}>curl</span>
-        <span className="text-muted-foreground"> -fsSL </span>
-        <span style={{ color: 'var(--syntax-string)' }}>https://opencode.ai/install</span>
-        <span className="text-muted-foreground"> | </span>
-        <span style={{ color: 'var(--syntax-keyword)' }}>bash</span>
+        <span style={{ color: 'var(--syntax-keyword)' }}>npm</span>
+        <span className="text-muted-foreground"> install -g </span>
+        <span style={{ color: 'var(--syntax-string)' }}>@openai/codex</span>
       </code>
       <button
         onClick={onCopy}
@@ -49,12 +43,9 @@ export function ChooserScreen({ onCliAvailable }: ChooserScreenProps) {
   const { t } = useI18n();
   const [copied, setCopied] = React.useState(false);
   const [isDesktopApp, setIsDesktopApp] = React.useState(false);
-  const [isApplyingPath, setIsApplyingPath] = React.useState(false);
   const [isManualChecking, setIsManualChecking] = React.useState(false);
-  const [opencodeBinary, setOpencodeBinary] = React.useState('');
   const [platform, setPlatform] = React.useState<OnboardingPlatform>('unknown');
   const [activeTab, setActiveTab] = React.useState<'local' | 'remote'>('local');
-  const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const [troubleOpen, setTroubleOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -74,25 +65,6 @@ export function ChooserScreen({ onCliAvailable }: ChooserScreenProps) {
     else setPlatform('unknown');
   }, []);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await runtimeFetch('/api/config/settings', { method: 'GET', headers: { Accept: 'application/json' } });
-        if (!response.ok) return;
-        const data = (await response.json().catch(() => null)) as null | { opencodeBinary?: unknown };
-        if (!data || cancelled) return;
-        const value = typeof data.opencodeBinary === 'string' ? data.opencodeBinary.trim() : '';
-        if (value) setOpencodeBinary(value);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const handleDragStart = React.useCallback(async (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('.app-region-no-drag')) return;
@@ -108,7 +80,10 @@ export function ChooserScreen({ onCliAvailable }: ChooserScreenProps) {
       const response = await runtimeFetch('/health');
       if (!response.ok) return false;
       const data = await response.json();
-      return data.openCodeRunning === true || data.isOpenCodeReady === true;
+      return data.codexReady === true
+        || data.codexRunning === true
+        || data.codex?.running === true
+        || data.codex?.initialized === true;
     } catch {
       return false;
     }
@@ -133,7 +108,7 @@ export function ChooserScreen({ onCliAvailable }: ChooserScreenProps) {
   }, [isDesktopApp, onCliAvailable, persistFirstChoice]);
 
   // Background polling: while the local tab is visible, periodically check
-  // whether the OpenCode CLI is reachable. As soon as it is, transition
+  // whether the Codex CLI is reachable. As soon as it is, transition
   // automatically — the user doesn't have to click anything.
   React.useEffect(() => {
     if (activeTab !== 'local') return;
@@ -176,35 +151,6 @@ export function ChooserScreen({ onCliAvailable }: ChooserScreenProps) {
     }
   }, [checkCliAvailability, announceAvailable]);
 
-  const handleBrowse = React.useCallback(async () => {
-    if (typeof window === 'undefined') return;
-    if (!isDesktopApp) return;
-
-    try {
-      const selected = await requestFileAccess();
-      if (selected.success && selected.path && selected.path.trim().length > 0) {
-        setOpencodeBinary(selected.path.trim());
-      }
-    } catch {
-      // ignore
-    }
-  }, [isDesktopApp]);
-
-  const handleApplyPath = React.useCallback(async () => {
-    setIsApplyingPath(true);
-    try {
-      await updateDesktopSettings({ opencodeBinary: opencodeBinary.trim() });
-      if (isDesktopApp) {
-        await persistFirstChoice('local');
-        await restartDesktopApp();
-        return;
-      }
-      await runtimeFetch('/api/config/reload', { method: 'POST' });
-    } finally {
-      setTimeout(() => setIsApplyingPath(false), 1000);
-    }
-  }, [isDesktopApp, opencodeBinary, persistFirstChoice]);
-
   const handleCopy = React.useCallback(async () => {
     const result = await copyTextToClipboard(INSTALL_COMMAND);
     if (result.ok) {
@@ -216,13 +162,6 @@ export function ChooserScreen({ onCliAvailable }: ChooserScreenProps) {
   }, []);
 
   const docsUrl = DOCS_URL;
-  const binaryPlaceholder =
-    platform === 'windows'
-      ? 'C:\\Users\\you\\AppData\\Roaming\\npm\\opencode.cmd'
-      : platform === 'linux'
-        ? '/home/you/.bun/bin/opencode'
-        : '/Users/you/.bun/bin/opencode';
-
   const showLocal = !isDesktopApp || activeTab === 'local';
 
   return (
@@ -361,48 +300,6 @@ export function ChooserScreen({ onCliAvailable }: ChooserScreenProps) {
                 </div>
               </div>
             </div>
-
-            <details
-              className="app-region-no-drag group rounded-lg border border-border/60 px-4 open:bg-background/40 transition-colors"
-              open={advancedOpen}
-              onToggle={(e) => setAdvancedOpen((e.currentTarget as HTMLDetailsElement).open)}
-            >
-              <summary className="flex items-center justify-between cursor-pointer py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors list-none [&::-webkit-details-marker]:hidden">
-                <span>{t('onboarding.localSetup.advanced.title')}</span>
-                <Icon name="arrow-down-s" className="h-4 w-4 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="pb-4 space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    value={opencodeBinary}
-                    onChange={(e) => setOpencodeBinary(e.target.value)}
-                    placeholder={binaryPlaceholder}
-                    disabled={isApplyingPath}
-                    className="flex-1 font-mono text-xs"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleBrowse}
-                    disabled={isApplyingPath || !isDesktopApp}
-                  >
-                    {t('onboarding.localSetup.actions.browse')}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleApplyPath}
-                    disabled={isApplyingPath || !opencodeBinary.trim()}
-                  >
-                    {t('onboarding.localSetup.actions.apply')}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground/70">
-                  {t('onboarding.localSetup.helper.saveAndReload')}
-                </p>
-              </div>
-            </details>
 
             <details
               className="app-region-no-drag group rounded-lg border border-border/60 px-4 open:bg-background/40 transition-colors"

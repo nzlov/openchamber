@@ -23,7 +23,7 @@ import {
 import type { DesktopSettings } from '@/lib/desktop';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
-const AGENTS_MD_PATH = '~/.config/opencode/AGENTS.md';
+const AGENTS_MD_PATH = '~/.codex/AGENTS.md';
 
 const readApiError = async (response: Response, fallback: string) => {
   const data = await response.json().catch(() => null) as { error?: unknown } | null;

@@ -59,7 +59,7 @@ import { GitHubPrPickerDialog } from '@/components/session/GitHubPrPickerDialog'
 import { Icon } from "@/components/icon/Icon";
 import { DraftPresetChips } from './DraftPresetChips';
 import { useChatSearchDirectory } from '@/hooks/useChatSearchDirectory';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { PROJECT_COLOR_MAP, PROJECT_ICON_MAP, ProjectIconImage } from '@/lib/projectMeta';
 import { useGitBranches, useGitStore, useIsGitRepo } from '@/stores/useGitStore';
@@ -94,7 +94,8 @@ import {
     findAttachmentCitationRanges,
 } from './attachmentCitations';
 import { getFileMentionAutocompleteQuery, type FileMentionAutocompleteInputSource } from './fileMentionAutocompleteState';
-import type { Part } from '@opencode-ai/sdk/v2/client';
+import type { Part } from '@/lib/codex/types';
+import { SUPPORTS_AGENT_SELECTION } from '@/lib/codex/capabilities';
 
 const MAX_VISIBLE_TEXTAREA_LINES = 8;
 const EMPTY_QUEUE: QueuedMessage[] = [];
@@ -1176,7 +1177,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
     const sendableAttachedFiles = attachedFiles;
 
     const knownAgentNames = React.useMemo(
-        () => new Set(agents.map((agent) => agent.name.toLowerCase())),
+        () => SUPPORTS_AGENT_SELECTION
+            ? new Set(agents.map((agent) => agent.name.toLowerCase()))
+            : new Set<string>(),
         [agents]
     );
     const knownAgentNamesRef = React.useRef(knownAgentNames);
@@ -1321,7 +1324,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
             return { sanitizedText: rawText, attachments: [] };
         }
 
-        const clientDirectory = opencodeClient.getDirectory() || '';
+        const clientDirectory = codexRuntimeClient.getDirectory() || '';
         const root = (chatSearchDirectory || clientDirectory).replace(/\\/g, '/').replace(/\/+$/, '');
         const seenPaths = new Set<string>();
         const attachments: AttachedFile[] = [];
@@ -1720,7 +1723,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
             sendConfig: currentProviderId && currentModelId ? {
                 providerID: currentProviderId,
                 modelID: currentModelId,
-                agent: currentAgentName ?? undefined,
+                agent: SUPPORTS_AGENT_SELECTION ? currentAgentName ?? undefined : undefined,
                 variant: currentVariant ?? undefined,
             } : undefined,
         });
@@ -1789,7 +1792,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         const capturedSendConfig = queuedOnly ? queuedMessagesToSend[0]?.sendConfig : undefined;
         const providerIdToSend = capturedSendConfig?.providerID ?? currentProviderId;
         const modelIdToSend = capturedSendConfig?.modelID ?? currentModelId;
-        const agentNameToSend = capturedSendConfig?.agent ?? currentAgentName;
+        const agentNameToSend = SUPPORTS_AGENT_SELECTION
+            ? capturedSendConfig?.agent ?? currentAgentName
+            : undefined;
         const variantToSend = capturedSendConfig?.variant ?? currentVariant;
 
         if (!providerIdToSend || !modelIdToSend) {
@@ -1802,7 +1807,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         // the card instantly (optimistic) and formally rejects the question.
         // Rejecting unblocks the agent's tool but does NOT end its turn, so a
         // direct send would race with the still-active run and be silently
-        // discarded by the OpenCode runner. Instead we queue the message; the
+        // discarded by the Codex runner. Instead we queue the message; the
         // queued-message auto-send hook delivers it as the next turn once the
         // rejected turn winds down and the session returns to idle. This avoids
         // aborting the turn (which would surface an "aborted" notice).
@@ -1840,7 +1845,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         // Process queued messages first
         for (let i = 0; i < queuedMessagesToSend.length; i++) {
             const queuedMsg = queuedMessagesToSend[i];
-            const { sanitizedText, mention } = parseAgentMentions(queuedMsg.content, agents);
+            const { sanitizedText, mention } = SUPPORTS_AGENT_SELECTION
+                ? parseAgentMentions(queuedMsg.content, agents)
+                : { sanitizedText: queuedMsg.content, mention: undefined };
             const { sanitizedText: queuedText, attachments: mentionAttachments } = extractInlineFileMentions(sanitizedText);
             addMentionedSkills(queuedText);
 
@@ -1869,7 +1876,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         // Add current input (skip for queued-only auto-send)
         if (!queuedOnly && inputSnapshot.hasContent) {
             const messageToSend = inputSnapshot.message.replace(/^\n+|\n+$/g, '');
-            const { sanitizedText, mention } = parseAgentMentions(messageToSend, agents);
+            const { sanitizedText, mention } = SUPPORTS_AGENT_SELECTION
+                ? parseAgentMentions(messageToSend, agents)
+                : { sanitizedText: messageToSend, mention: undefined };
             const { sanitizedText: messageText, attachments: mentionAttachments } = extractInlineFileMentions(sanitizedText);
             const attachmentsToSend = sanitizeAttachmentsForSend(sendableAttachedFiles);
             addMentionedSkills(messageText);
@@ -2001,7 +2010,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                 try {
                     await sessionActions.waitForConnectionOrThrow();
                     const compactDirectory = useSessionUIStore.getState().getDirectoryForSession(currentSessionId) || currentDirectory || undefined;
-                    await opencodeClient.summarizeSession(currentSessionId, currentProviderId, currentModelId, compactDirectory);
+                    await codexRuntimeClient.summarizeSession(currentSessionId, currentProviderId, currentModelId, compactDirectory);
                 } catch (error) {
                     toast.error(error instanceof Error ? error.message : t('chat.chatInput.toast.compactFailed'));
                 }
@@ -2430,14 +2439,16 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
             return;
         }
 
-        const cycleAgentBackwardShortcut = cycleAgentShortcut && !cycleAgentShortcut.includes('shift')
+        const cycleAgentBackwardShortcut = SUPPORTS_AGENT_SELECTION && cycleAgentShortcut && !cycleAgentShortcut.includes('shift')
             ? normalizeCombo(`shift+${cycleAgentShortcut}`)
             : '';
-        const cycleAgentDirection = cycleAgentBackwardShortcut && eventMatchesShortcut(e, cycleAgentBackwardShortcut)
-            ? -1
-            : eventMatchesShortcut(e, cycleAgentShortcut)
-                ? 1
-                : 0;
+        const cycleAgentDirection = SUPPORTS_AGENT_SELECTION
+            ? cycleAgentBackwardShortcut && eventMatchesShortcut(e, cycleAgentBackwardShortcut)
+                ? -1
+                : eventMatchesShortcut(e, cycleAgentShortcut)
+                    ? 1
+                    : 0
+            : 0;
 
         if (cycleAgentDirection !== 0 && !showCommandAutocomplete && !showSkillAutocomplete && !showSnippetAutocomplete && !showFileMention) {
             e.preventDefault();
@@ -4405,8 +4416,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                             ref={mentionRef}
                             searchQuery={mentionQuery}
                             onFileSelect={handleFileSelect}
-                            onAgentSelect={handleAgentSelect}
+                            onAgentSelect={SUPPORTS_AGENT_SELECTION ? handleAgentSelect : undefined}
                             onClose={() => setShowFileMention(false)}
+                            showAgents={SUPPORTS_AGENT_SELECTION}
                             style={isDesktopExpanded && autocompleteOverlayPosition
                                 ? {
                                     left: `${autocompleteOverlayPosition.left}px`,
@@ -4551,11 +4563,13 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                                     <div className="flex items-center min-w-0 gap-x-1 justify-end">
                                         <div className="flex items-center gap-x-2 min-w-0 max-w-[60vw] flex-shrink">
                                             <MemoMobileModelButton onOpenModel={() => handleOpenMobilePanel('model')} className="min-w-0 flex-shrink" />
-                                            <MemoMobileAgentButton
-                                                onOpenAgentPanel={handleOpenAgentPanel}
-                                                onCycleAgent={handleCycleAgent}
-                                                className="min-w-0 flex-shrink"
-                                            />
+                                            {SUPPORTS_AGENT_SELECTION ? (
+                                                <MemoMobileAgentButton
+                                                    onOpenAgentPanel={handleOpenAgentPanel}
+                                                    onCycleAgent={handleCycleAgent}
+                                                    className="min-w-0 flex-shrink"
+                                                />
+                                            ) : null}
                                         </div>
                                         <div className="flex items-center gap-x-1 flex-shrink-0">
                                             <MemoBrowserVoiceButton />

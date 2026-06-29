@@ -1,0 +1,32 @@
+---
+title: Conexión de Codex
+description: Soluciona que OpenChamber no se conecte a su servidor de Codex.
+---
+
+# Conexión de Codex
+
+Si OpenChamber carga pero nunca pasa de "Codex is restarting", o el chat no responde, el servidor con el que se comunica no es accesible. Repasa estos pasos.
+
+## Se queda atascado en "Codex is restarting"
+
+- dale un momento justo después de iniciar: este estado es normal mientras el servidor arranca
+- comprueba si el servidor está vivo con `openchamber status`
+- reinícialo con `openchamber restart`
+- ve los detalles de arranque con `openchamber logs`
+
+## Te conectas a tu propio servidor
+
+Si configuraste OpenChamber para usar un servidor existente, revisa de nuevo la configuración de [Codex Runtime](/es/codex-server/):
+
+- si la dirección es inválida, OpenChamber la ignora e inicia su propio servidor en su lugar; busca una advertencia `[config]` en los registros
+
+## Sigue fallando
+
+- confirma que Node.js sea la versión `20` o más reciente
+- reinstala la última CLI
+- abre `http://localhost:3000` directamente antes de probar cualquier túnel o enlace remoto
+
+## Relacionado
+
+- [Codex Runtime](/es/codex-server/) — cómo encuentra y gestiona OpenChamber el servidor
+- [Resolución de problemas](/es/troubleshooting/) — otros problemas comunes

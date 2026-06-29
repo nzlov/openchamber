@@ -222,6 +222,14 @@ describe('ui auth client credential seam', () => {
     expect(arbitraryGetCalled).toBe(false);
     expect(arbitraryGetRes.statusCode).toBe(401);
 
+    const codexEventsReq = { method: 'GET', path: '/api/codex/events', url: `/api/codex/events?oc_url_token=${encodeURIComponent(urlToken)}`, headers: { accept: 'text/event-stream' } };
+    const codexEventsRes = createResponse();
+    let codexEventsCalled = false;
+    await auth.requireAuth(codexEventsReq, codexEventsRes, () => {
+      codexEventsCalled = true;
+    });
+    expect(codexEventsCalled).toBe(true);
+
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
       const writeReq = { method, path: '/api/fs/raw', url: `/api/fs/raw?path=%2Ftmp%2Fimage.png&oc_url_token=${encodeURIComponent(urlToken)}`, headers: { accept: 'application/json' } };
       const writeRes = createResponse();

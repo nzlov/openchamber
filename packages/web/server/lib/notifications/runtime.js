@@ -10,8 +10,6 @@ export const createNotificationTriggerRuntime = (deps) => {
     emitDesktopNotification,
     broadcastUiNotification,
     sendPushToAllUiSessions,
-    buildOpenCodeUrl,
-    getOpenCodeAuthHeaders,
   } = deps;
 
   let getIsWindowFocused = typeof deps.getIsWindowFocused === 'function'
@@ -91,38 +89,7 @@ export const createNotificationTriggerRuntime = (deps) => {
 
     const cached = getCachedSessionParentId(sessionId);
     if (cached !== undefined) return cached;
-
-    try {
-      const response = await fetch(buildOpenCodeUrl('/session', ''), {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          ...getOpenCodeAuthHeaders(),
-        },
-        signal: AbortSignal.timeout(2000),
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-      const data = await response.json().catch(() => null);
-      const sessions = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.items)
-          ? data.items
-          : Array.isArray(data?.data)
-            ? data.data
-            : null;
-      if (!sessions) {
-        return undefined;
-      }
-
-      const match = sessions.find((session) => session && typeof session === 'object' && session.id === sessionId);
-      const parentID = match?.parentID ?? null;
-      setCachedSessionParentId(sessionId, parentID);
-      return parentID;
-    } catch {
-      return undefined;
-    }
+    return undefined;
   };
 
   // Mirrors client-side autoRespondsPermission: a session auto-accepts if it

@@ -1,0 +1,1339 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { DirectoryListResult, FilesAPI } from '../api/types';
+import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
+import { codexClient } from '@/lib/codex/client';
+import { runtimeFetch } from '@/lib/runtime-fetch';
+import { getRuntimeUrlResolver } from '@/lib/runtime-url';
+import type { Agent, Config, CodexRuntimeSdkClient, Event, Message, Part, Provider, Session } from '@/lib/codex/types';
+import type { PermissionRequest } from '@/types/permission';
+import type { QuestionRequest } from '@/types/question';
+
+export type ProjectFileSearchHit = {
+  name: string;
+  path: string;
+  relativePath: string;
+  extension?: string;
+};
+
+type DirectorySwitchResult = {
+  success: boolean;
+  restarted: boolean;
+  path: string;
+  agents?: Agent[];
+  providers?: Provider[];
+  models?: unknown[];
+};
+
+type SdkResult<T = unknown> = {
+  data?: T;
+  error?: unknown;
+  response?: { status?: number; headers?: Headers };
+};
+
+type CompatSessionStatus = {
+  type?: string;
+  attempt?: number;
+  message?: string;
+  next?: number;
+};
+
+type CompatMessageRecord = {
+  info: Message;
+  parts: Part[];
+};
+
+type CodexEventStreamOptions = {
+  signal?: AbortSignal;
+  headers?: HeadersInit;
+  onSseEvent?: (event: { id?: string; event?: string }) => void;
+  onSseError?: (error: unknown) => void;
+};
+
+type CodexThread = Record<string, any>;
+type CodexTurn = Record<string, any>;
+type CodexThreadItem = Record<string, any>;
+type CompatMessageTime = { created: number; updated?: number; completed?: number };
+type CompatMessageOptions = { parentID?: string; status?: string; finish?: string };
+
+const normalizeFsPath = (value: string): string => value.replace(/\\/g, '/');
+
+const unsupported = (operation: string): never => {
+  throw new Error(`${operation} is no longer available after the Codex runtime migration.`);
+};
+
+const ok = <T>(data: T): SdkResult<T> => ({ data });
+
+const createUnsupportedSdkProxy = (path = 'sdk'): any => new Proxy(() => undefined, {
+  get(_target, property) {
+    if (property === 'then') return undefined;
+    return createUnsupportedSdkProxy(`${path}.${String(property)}`);
+  },
+  apply() {
+    return Promise.reject(new Error(`${path} is no longer available after the Codex runtime migration.`));
+  },
+});
+
+const createCompatSdkProxy = (target: Record<string, any>, path = 'sdk'): any => new Proxy(target, {
+  get(object, property) {
+    if (property === 'then') return undefined;
+    if (property in object) {
+      const value = object[property as keyof typeof object];
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return createCompatSdkProxy(value, `${path}.${String(property)}`);
+      }
+      return value;
+    }
+    return createUnsupportedSdkProxy(`${path}.${String(property)}`);
+  },
+});
+
+const extractArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object' && Array.isArray((value as { data?: unknown }).data)) {
+    return (value as { data: unknown[] }).data;
+  }
+  if (value && typeof value === 'object' && Array.isArray((value as { threads?: unknown }).threads)) {
+    return (value as { threads: unknown[] }).threads;
+  }
+  return [];
+};
+
+const extractObject = (value: unknown, key: string): Record<string, any> | null => {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, any>;
+  if (record[key] && typeof record[key] === 'object') return record[key] as Record<string, any>;
+  return record;
+};
+
+const extractNextCursor = (value: unknown): string | null => {
+  if (!value || typeof value !== 'object') return null;
+  const cursor = (value as { nextCursor?: unknown }).nextCursor;
+  return typeof cursor === 'string' && cursor.length > 0 ? cursor : null;
+};
+
+const okPage = <T>(data: T, nextCursor: string | null): SdkResult<T> => {
+  const result = ok(data);
+  if (nextCursor) {
+    result.response = { headers: new Headers({ 'x-next-cursor': nextCursor }) };
+  }
+  return result;
+};
+
+const secondsToMilliseconds = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return value > 10_000_000_000 ? Math.trunc(value) : Math.trunc(value * 1000);
+};
+
+const firstTimestamp = (...values: unknown[]): number | undefined => {
+  for (const value of values) {
+    const timestamp = secondsToMilliseconds(value);
+    if (timestamp !== undefined) return timestamp;
+  }
+  return undefined;
+};
+
+const errorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+  return '';
+};
+
+const isEmptyCodexThreadHistoryError = (error: unknown): boolean => {
+  const message = errorMessage(error);
+  return message.includes('is not materialized yet')
+    || message.includes('includeTurns is unavailable before first user message')
+    || message.includes('thread/turns/list is unavailable before first user message')
+    || (message.includes('rollout at ') && message.includes(' is empty'))
+    || (message.includes('thread-store internal error') && message.includes('failed to read thread') && message.includes(' is empty'));
+};
+
+const readSessionId = (input: unknown): string | null => {
+  if (typeof input === 'string' && input) return input;
+  if (!input || typeof input !== 'object') return null;
+  const record = input as Record<string, unknown>;
+  const value = record.sessionID ?? record.sessionId ?? record.id ?? record.threadId;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+};
+
+const codexTextInput = (text: string) => ({
+  type: 'text',
+  text,
+  text_elements: [],
+});
+
+const stripFileUrl = (value: string): string => {
+  if (!value.startsWith('file://')) return value;
+  try {
+    return decodeURIComponent(new URL(value).pathname);
+  } catch {
+    return value.slice('file://'.length);
+  }
+};
+
+const basename = (value: string): string => {
+  const normalized = normalizeFsPath(value);
+  return normalized.split('/').filter(Boolean).pop() || normalized;
+};
+
+const normalizeCodexFileInput = (value: unknown): unknown | null => {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const mime = typeof record.mime === 'string' ? record.mime : '';
+  const type = typeof record.type === 'string' ? record.type : '';
+  const detail = typeof record.detail === 'string' ? { detail: record.detail } : {};
+  const url = typeof record.url === 'string' ? record.url : null;
+  const path = typeof record.path === 'string'
+    ? record.path
+    : url?.startsWith('file://')
+      ? stripFileUrl(url)
+      : null;
+  const name = typeof record.filename === 'string' && record.filename
+    ? record.filename
+    : path
+      ? basename(path)
+      : url
+        ? basename(url)
+        : 'attachment';
+
+  if (mime.startsWith('image/') || type === 'image') {
+    if (path) return { type: 'localImage', path, ...detail };
+    if (url) return { type: 'image', url, ...detail };
+  }
+
+  if (path) return { type: 'mention', name, path };
+  return null;
+};
+
+const normalizeCodexInput = (params: { text?: string; parts?: unknown[]; input?: unknown; files?: unknown[]; additionalParts?: unknown[] }): unknown[] => {
+  if (Array.isArray(params.input)) return params.input;
+  const inputs: unknown[] = [];
+  const appendText = (text: unknown) => {
+    if (typeof text === 'string' && text.length > 0) {
+      inputs.push(codexTextInput(text));
+    }
+  };
+  const appendFiles = (files: unknown) => {
+    if (!Array.isArray(files)) return;
+    for (const file of files) {
+      const input = normalizeCodexFileInput(file);
+      if (input) inputs.push(input);
+    }
+  };
+
+  const text = typeof params.text === 'string' ? params.text : '';
+  appendText(text);
+
+  for (const collection of [params.parts, params.additionalParts]) {
+    if (!Array.isArray(collection) || collection.length === 0) continue;
+    const mapped = collection
+      .map((part) => {
+        if (!part || typeof part !== 'object') return null;
+        const record = part as Record<string, unknown>;
+        if (record.type === 'text' || typeof record.text === 'string' || typeof record.content === 'string') {
+          const text = typeof record.text === 'string'
+            ? record.text
+            : typeof record.content === 'string'
+              ? record.content
+              : '';
+          return text ? codexTextInput(text) : null;
+        }
+        if (record.type === 'file' || record.url || record.path) return normalizeCodexFileInput(record);
+        return record;
+      })
+      .filter(Boolean);
+    inputs.push(...mapped);
+    for (const part of collection) {
+      if (part && typeof part === 'object') appendFiles((part as Record<string, unknown>).files);
+    }
+  }
+  appendFiles(params.files);
+  return inputs;
+};
+
+const readCurrentDirectoryFromRuntime = (): string | null => {
+  return null;
+};
+
+class CodexCompatClient {
+  private directory: string | null = readCurrentDirectoryFromRuntime();
+
+  private readonly sdkProxy: CodexRuntimeSdkClient;
+
+  private readonly activeTurns = new Map<string, string>();
+
+  private readonly pendingProviderOAuthLogins = new Map<string, string>();
+
+  constructor() {
+    const sessionApi = {
+      create: async (input: unknown) => ok(await this.createSession(input as any)),
+      list: async (params: unknown = {}) => this.listSessionsResult(params as Record<string, unknown>),
+      get: async (params: unknown) => {
+        const sessionId = readSessionId(params);
+        if (!sessionId) return ok(null);
+        return ok(await this.getSession(sessionId, (params as { directory?: string | null })?.directory));
+      },
+      update: async (params: unknown = {}) => {
+        const sessionId = readSessionId(params);
+        if (!sessionId) return ok(null);
+        return ok(await this.updateSession(sessionId, params as Record<string, unknown>, (params as { directory?: string | null })?.directory));
+      },
+      delete: async (params: unknown) => {
+        const sessionId = readSessionId(params);
+        return ok(sessionId ? await this.deleteSession(sessionId, (params as { directory?: string | null })?.directory) : false);
+      },
+      messages: async (params: unknown = {}) => {
+        const sessionId = readSessionId(params);
+        if (!sessionId) return ok([]);
+        const limit = typeof (params as { limit?: unknown }).limit === 'number' ? (params as { limit: number }).limit : undefined;
+        const before = typeof (params as { before?: unknown }).before === 'string' ? (params as { before: string }).before : undefined;
+        return this.getSessionMessagesResult(sessionId, limit, before);
+      },
+      children: async () => ok([]),
+      init: async () => ok({}),
+      abort: async (params: unknown) => {
+        const sessionId = readSessionId(params);
+        if (sessionId) await this.abortSession(sessionId);
+        return ok(true);
+      },
+      revert: async (params: unknown = {}) => {
+        const sessionId = readSessionId(params);
+        if (!sessionId) return ok(null);
+        const record = params as Record<string, unknown>;
+        const messageId = typeof record.messageID === 'string'
+          ? record.messageID
+          : typeof record.messageId === 'string'
+            ? record.messageId
+            : undefined;
+        return ok(await this.revertSession(sessionId, messageId, undefined, typeof record.directory === 'string' ? record.directory : undefined));
+      },
+      fork: async (params: unknown = {}) => {
+        const sessionId = readSessionId(params);
+        if (!sessionId) return ok(null);
+        const record = params as Record<string, unknown>;
+        const messageId = typeof record.messageID === 'string'
+          ? record.messageID
+          : typeof record.messageId === 'string'
+            ? record.messageId
+            : undefined;
+        return ok(await this.forkSession(sessionId, messageId, typeof record.directory === 'string' ? record.directory : undefined));
+      },
+      command: async (params: unknown = {}) => ok(await this.sendCommand(params as any)),
+      prompt: async (params: unknown) => ok(await this.sendMessage(params as any)),
+      promptAsync: async (params: unknown) => ok(await this.sendMessage(params as any)),
+      status: async () => ok(await this.getSessionStatus()),
+      unrevert: async (params: unknown = {}) => {
+        const sessionId = readSessionId(params);
+        return ok(sessionId ? await this.unrevertSession(sessionId, (params as { directory?: string | null })?.directory) : null);
+      },
+      share: async () => ok(null),
+      unshare: async () => ok(null),
+      summarize: async (params: unknown = {}) => {
+        const sessionId = readSessionId(params);
+        if (sessionId) await this.summarizeSession(sessionId);
+        return ok({});
+      },
+      todo: async () => ok([]),
+    };
+    this.sdkProxy = createCompatSdkProxy({
+      app: {
+        agents: async () => ok(await this.listAgents()),
+        skills: async () => ok(await this.listSkillsWithDetails()),
+      },
+      path: {
+        get: async () => ok({ state: '', config: '', worktree: '', directory: this.getDirectory() ?? '', home: '' }),
+      },
+      project: {
+        current: async () => ok({ id: this.getDirectory() ?? '', path: this.getDirectory() ?? '' }),
+        list: async () => ok([]),
+      },
+      config: {
+        get: async () => ok(await this.getConfig()),
+        providers: async () => ok(await this.getProviders()),
+        update: async (config: Record<string, unknown>) => ok(await this.updateConfig(config)),
+      },
+      global: {
+        config: {
+          get: async () => ok(await this.getConfig()),
+        },
+        event: (options: CodexEventStreamOptions = {}) => this.openEventStream(options),
+      },
+      experimental: {
+        session: sessionApi,
+      },
+      session: sessionApi,
+      permission: {
+        list: async () => ok(await this.listPendingPermissions()),
+      },
+      question: {
+        list: async () => ok(await this.listPendingQuestions()),
+      },
+      command: {
+        list: async () => ok(await this.listCommands()),
+      },
+      mcp: {
+        status: async () => ok({}),
+      },
+      lsp: {
+        status: async () => ok([]),
+      },
+      vcs: {
+        get: async () => ok({}),
+      },
+      provider: {
+        list: async () => ok(await this.getProviders()),
+        auth: async () => ok(await this.getProviderAuthMethods()),
+        oauth: {
+          authorize: async (params: unknown) => ok(await this.authorizeProviderOAuth(params as Record<string, unknown>)),
+          callback: async (params: unknown) => ok(await this.completeProviderOAuth(params as Record<string, unknown>)),
+        },
+      },
+      auth: {
+        set: async (params: unknown) => ok(await this.setProviderApiKey(params as Record<string, unknown>)),
+      },
+    }) as CodexRuntimeSdkClient;
+  }
+
+  reconnectToRuntimeBaseUrl(): void {
+    this.clearConfigCache();
+  }
+
+  getBaseUrl(): string {
+    try {
+      return getRuntimeUrlResolver().api('/api');
+    } catch {
+      return '/api';
+    }
+  }
+
+  getSdkClient(): CodexRuntimeSdkClient {
+    return this.sdkProxy;
+  }
+
+  getApiClient(): CodexRuntimeSdkClient {
+    return this.sdkProxy;
+  }
+
+  getScopedSdkClient(_directory?: string | null): CodexRuntimeSdkClient {
+    void _directory;
+    return this.sdkProxy;
+  }
+
+  getScopedApiClient(_directory?: string | null): CodexRuntimeSdkClient {
+    void _directory;
+    return this.sdkProxy;
+  }
+
+  setDirectory(directory?: string | null): void {
+    this.directory = typeof directory === 'string' && directory.trim() ? directory.trim() : null;
+  }
+
+  getDirectory(): string | null {
+    return this.directory ?? readCurrentDirectoryFromRuntime();
+  }
+
+  async withDirectory<T>(directory: string | null | undefined, fn: () => Promise<T> | T): Promise<T> {
+    const previous = this.directory;
+    this.setDirectory(directory ?? previous);
+    try {
+      return await fn();
+    } finally {
+      this.directory = previous;
+    }
+  }
+
+  clearConfigCache(): void {
+  }
+
+  async checkHealth(): Promise<boolean> {
+    try {
+      const health = await codexClient.getHealth();
+      if (health.ready || health.running || health.initialized) return true;
+      await codexClient.listThreads({ limit: 1 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getConfig(_directory?: string | null): Promise<Config> {
+    void _directory;
+    try {
+      const value = await codexClient.readConfig();
+      return (extractObject(value, 'config') ?? {}) as Config;
+    } catch {
+      return {};
+    }
+  }
+
+  async updateConfig(config: Record<string, unknown>): Promise<Config> {
+    return await codexClient.updateConfig(config) as Config;
+  }
+
+  async updateConfigPartial(modifier: (config: Config) => Config): Promise<Config> {
+    const current = await this.getConfig();
+    return this.updateConfig(modifier(current));
+  }
+
+  async getProviders(): Promise<{ providers: Provider[]; default: Record<string, string> }> {
+    const response = await codexClient.listModels({ cwd: this.getDirectory() ?? undefined }).catch(() => null);
+    const rawModels = extractArray(response);
+    const providerMap = new Map<string, Provider>();
+    for (const rawModel of rawModels) {
+      if (!rawModel || typeof rawModel !== 'object') continue;
+      const model = rawModel as Record<string, any>;
+      const providerID = typeof model.providerID === 'string'
+        ? model.providerID
+        : typeof model.provider === 'string'
+          ? model.provider
+          : typeof model.modelProvider === 'string'
+            ? model.modelProvider
+            : 'codex';
+      const modelID = typeof model.id === 'string'
+        ? model.id
+        : typeof model.modelID === 'string'
+          ? model.modelID
+          : typeof model.name === 'string'
+            ? model.name
+            : null;
+      if (!modelID) continue;
+      const provider = providerMap.get(providerID) ?? {
+        id: providerID,
+        name: providerID,
+        models: {},
+        source: 'codex',
+      };
+      provider.models[modelID] = {
+        id: modelID,
+        name: typeof model.name === 'string' ? model.name : modelID,
+        displayName: typeof model.displayName === 'string' ? model.displayName : undefined,
+        providerID,
+        modelID,
+        ...model,
+      };
+      providerMap.set(providerID, provider);
+    }
+    return { providers: Array.from(providerMap.values()), default: {} };
+  }
+
+  async getProvidersForConfig(_directory?: string | null): Promise<{ providers: Provider[]; default: Record<string, string> }> {
+    void _directory;
+    return this.getProviders();
+  }
+
+  private isCodexAccountProvider(providerId: unknown): boolean {
+    if (typeof providerId !== 'string') return true;
+    return ['codex', 'openai', 'chatgpt'].includes(providerId.toLowerCase());
+  }
+
+  async getProviderAuthMethods(): Promise<Record<string, Array<{ type: string; name: string; label: string; method: number }>>> {
+    const response = await this.getProviders();
+    const providerIds = new Set(response.providers.map((provider) => provider.id));
+    providerIds.add('openai');
+    providerIds.add('codex');
+    const authMethods: Record<string, Array<{ type: string; name: string; label: string; method: number }>> = {};
+    for (const providerId of providerIds) {
+      if (!this.isCodexAccountProvider(providerId)) continue;
+      authMethods[providerId] = [
+        { type: 'oauth', name: 'ChatGPT', label: 'ChatGPT', method: 0 },
+      ];
+    }
+    return authMethods;
+  }
+
+  async setProviderApiKey(params: Record<string, unknown>): Promise<unknown> {
+    if (!this.isCodexAccountProvider(params.providerID ?? params.providerId)) {
+      throw new Error('Codex API key login is only available for OpenAI-backed Codex providers.');
+    }
+    const auth = params.auth && typeof params.auth === 'object' ? params.auth as Record<string, unknown> : {};
+    const apiKey = typeof auth.key === 'string'
+      ? auth.key
+      : typeof params.apiKey === 'string'
+        ? params.apiKey
+        : typeof params.key === 'string'
+          ? params.key
+          : '';
+    if (!apiKey.trim()) {
+      throw new Error('Codex API key is required.');
+    }
+    return codexClient.loginAccount({ type: 'apiKey', apiKey: apiKey.trim() });
+  }
+
+  async authorizeProviderOAuth(params: Record<string, unknown>): Promise<unknown> {
+    if (!this.isCodexAccountProvider(params.providerID ?? params.providerId)) {
+      throw new Error('Codex OAuth login is only available for OpenAI-backed Codex providers.');
+    }
+    const response = await codexClient.loginAccount({ type: 'chatgpt', codexStreamlinedLogin: true });
+    const record = response && typeof response === 'object' ? response as Record<string, unknown> : {};
+    const loginId = typeof record.loginId === 'string' ? record.loginId : null;
+    if (loginId) {
+      const providerId = typeof params.providerID === 'string'
+        ? params.providerID
+        : typeof params.providerId === 'string'
+          ? params.providerId
+          : 'codex';
+      const method = typeof params.method === 'number' ? params.method : 0;
+      this.pendingProviderOAuthLogins.set(`${providerId}:${method}`, loginId);
+    }
+    return {
+      ...record,
+      ...(typeof record.authUrl === 'string' ? { url: record.authUrl } : {}),
+      ...(typeof record.verificationUrl === 'string' ? { url: record.verificationUrl, verification_uri: record.verificationUrl } : {}),
+      ...(typeof record.userCode === 'string' ? { user_code: record.userCode } : {}),
+    };
+  }
+
+  async completeProviderOAuth(params: Record<string, unknown>): Promise<unknown> {
+    const account = await codexClient.readAccount({ refreshToken: true });
+    const accountPayload = account && typeof account === 'object' ? account as Record<string, unknown> : {};
+    const accountRecord = accountPayload.account;
+    if (!accountRecord || typeof accountRecord !== 'object') {
+      throw new Error('Codex account login is not complete.');
+    }
+    const providerId = typeof params.providerID === 'string'
+      ? params.providerID
+      : typeof params.providerId === 'string'
+        ? params.providerId
+        : 'codex';
+    const method = typeof params.method === 'number' ? params.method : 0;
+    this.pendingProviderOAuthLogins.delete(`${providerId}:${method}`);
+    return account;
+  }
+
+  async listAgents(_directory?: string | null): Promise<Agent[]> {
+    void _directory;
+    return [];
+  }
+
+  async listToolIds(_options?: unknown): Promise<string[]> {
+    void _options;
+    return [];
+  }
+
+  async listSessions(params: Record<string, unknown> = {}): Promise<Session[]> {
+    return (await this.listSessionsResult(params)).data ?? [];
+  }
+
+  private async listSessionsResult(params: Record<string, unknown> = {}): Promise<SdkResult<Session[]>> {
+    const response = await codexClient.listThreads({
+      archived: typeof params.archived === 'boolean' ? params.archived : undefined,
+      cwd: typeof params.directory === 'string' ? params.directory : this.getDirectory() ?? undefined,
+      limit: typeof params.limit === 'number' ? params.limit : undefined,
+      cursor: typeof params.cursor === 'string' || typeof params.cursor === 'number' ? String(params.cursor) : undefined,
+    });
+    return okPage(extractArray(response).map((item) => this.toSession(item as CodexThread)), extractNextCursor(response));
+  }
+
+  async getSession(id: string, _directory?: string | null): Promise<Session> {
+    void _directory;
+    const response = await codexClient.readThread(id, { includeTurns: false });
+    const thread = extractObject(response, 'thread');
+    return this.toSession((thread ?? { id }) as CodexThread);
+  }
+
+  async createSession(input: string | { title?: string; directory?: string | null; [key: string]: unknown } = {}, _directory?: string | null): Promise<Session> {
+    const title = typeof input === 'string' ? input : input.title;
+    const cwd = typeof input === 'object' ? input.directory ?? _directory ?? undefined : _directory ?? undefined;
+    const response = await codexClient.startThread({ title, cwd });
+    const thread = extractObject(response, 'thread');
+    if (thread) return this.toSession(thread);
+    const id = this.extractThreadId(response) ?? `thread_${Date.now().toString(16)}`;
+    return { id, title, directory: cwd, time: { created: Date.now() } };
+  }
+
+  async updateSession(id: string, patch: Record<string, unknown>, _directory?: string | null): Promise<Session> {
+    void _directory;
+    await codexClient.updateThread(id, patch).catch(() => undefined);
+    return { id, ...patch, time: {} };
+  }
+
+  async deleteSession(id: string, _directory?: string | null): Promise<boolean> {
+    void _directory;
+    await codexClient.deleteThread(id).catch(() => undefined);
+    return true;
+  }
+
+  async getSessionMessages(id: string, limit?: number, before?: string): Promise<CompatMessageRecord[]> {
+    return (await this.getSessionMessagesResult(id, limit, before)).data ?? [];
+  }
+
+  private async getSessionMessagesResult(id: string, limit?: number, before?: string): Promise<SdkResult<CompatMessageRecord[]>> {
+    const response = await codexClient.listThreadTurns(id, {
+      limit,
+      cursor: before,
+      sortDirection: 'asc',
+      itemsView: 'full',
+    }).catch((error) => {
+      if (isEmptyCodexThreadHistoryError(error)) {
+        return { data: [], nextCursor: null };
+      }
+      throw error;
+    });
+    const turns = extractArray(response) as CodexTurn[];
+    return okPage(turns.flatMap((turn) => this.toMessageRecords(id, turn)), extractNextCursor(response));
+  }
+
+  async getSessionStatus(): Promise<Record<string, CompatSessionStatus>> {
+    return {};
+  }
+
+  async getSessionStatusForDirectory(_directory?: string | null): Promise<Record<string, CompatSessionStatus>> {
+    void _directory;
+    return {};
+  }
+
+  async listPendingQuestions(_options?: unknown): Promise<QuestionRequest[]> {
+    void _options;
+    return [];
+  }
+
+  async listPendingPermissions(_options?: unknown): Promise<PermissionRequest[]> {
+    void _options;
+    return [];
+  }
+
+  async sendMessage(params: { id?: string; sessionId?: string; sessionID?: string; text?: string; parts?: unknown[]; [key: string]: unknown }): Promise<CompatMessageRecord> {
+    const sessionId = params.id ?? params.sessionId ?? params.sessionID;
+    if (typeof sessionId !== 'string' || !sessionId) return unsupported('sendMessage without a Codex thread');
+    const input = normalizeCodexInput(params);
+    if (input.length === 0) return unsupported('sendMessage without Codex input');
+    const model = typeof params.model === 'string'
+      ? params.model
+      : typeof params.modelID === 'string'
+        ? params.modelID
+        : undefined;
+    const response = await codexClient.startTurn(sessionId, {
+      input: input as any,
+      cwd: typeof params.directory === 'string' ? params.directory : this.getDirectory() ?? undefined,
+      ...(model ? { model } : {}),
+      ...(typeof params.messageId === 'string' ? { clientUserMessageId: params.messageId } : {}),
+    });
+    const turn = extractObject(response, 'turn');
+    if (typeof turn?.id === 'string') {
+      this.activeTurns.set(sessionId, turn.id);
+    }
+    const record = this.toUserMessageRecord(sessionId, `local_${Date.now().toString(16)}`, input);
+    return record;
+  }
+
+  async sendCommand(params: { id?: string; sessionId?: string; sessionID?: string; command?: string; arguments?: string; skillPath?: string; [key: string]: unknown } = {}): Promise<string> {
+    const command = typeof params.command === 'string' ? params.command.trim() : '';
+    const args = typeof params.arguments === 'string' ? params.arguments.trim() : '';
+    if (!command) return unsupported('sendCommand without a Codex command');
+    const input = typeof params.skillPath === 'string' && params.skillPath
+      ? [
+          { type: 'skill', name: command, path: params.skillPath },
+          ...(args ? [codexTextInput(args)] : []),
+        ]
+      : [codexTextInput(`/${command}${args ? ` ${args}` : ''}`)];
+    await this.sendMessage({ ...params, input });
+    return command;
+  }
+
+  async shellSession(params: { sessionId?: string; id?: string; sessionID?: string; command?: string; directory?: string | null; [key: string]: unknown }): Promise<CompatMessageRecord> {
+    const sessionId = params.sessionId ?? params.id ?? params.sessionID;
+    if (typeof sessionId !== 'string' || !sessionId) return unsupported('shellSession without a Codex thread');
+    const command = typeof params.command === 'string' ? params.command : '';
+    if (!command.trim()) return unsupported('shellSession without a shell command');
+    await codexClient.shellCommand(sessionId, { command });
+    return this.toUserMessageRecord(sessionId, `local_${Date.now().toString(16)}`, [codexTextInput(command)]);
+  }
+
+  async summarizeSession(..._args: unknown[]): Promise<void> {
+    const sessionId = typeof _args[0] === 'string' ? _args[0] : '';
+    if (!sessionId) return unsupported('summarizeSession without a Codex thread');
+    await codexClient.compactThread(sessionId);
+  }
+
+  async revertSession(sessionId: string, messageId?: string, _partId?: string, directory?: string | null): Promise<Session> {
+    void _partId;
+    if (!sessionId) return unsupported('revertSession without a Codex thread');
+    const numTurns = await this.resolveRollbackTurnCount(sessionId, messageId);
+    const response = await codexClient.rollbackThread(sessionId, { numTurns });
+    const thread = extractObject(response, 'thread') ?? { id: sessionId, cwd: directory ?? undefined };
+    return {
+      ...this.toSession(thread),
+      revert: messageId ? { messageID: messageId } : undefined,
+    };
+  }
+
+  async forkSession(sessionId: string, _messageId?: string, directory?: string | null): Promise<Session> {
+    void _messageId;
+    if (!sessionId) return unsupported('forkSession without a Codex thread');
+    const response = await codexClient.forkThread(sessionId, {
+      ...(directory ? { cwd: directory } : {}),
+      excludeTurns: true,
+    });
+    const thread = extractObject(response, 'thread');
+    if (thread) return this.toSession(thread);
+    const id = this.extractThreadId(response) ?? `thread_${Date.now().toString(16)}`;
+    return { id, parentID: sessionId, directory: directory ?? undefined, time: { created: Date.now() } };
+  }
+
+  async unrevertSession(sessionId: string, directory?: string | null): Promise<Session> {
+    if (!sessionId) return unsupported('unrevertSession without a Codex thread');
+    const session = await this.getSession(sessionId, directory);
+    if ('revert' in session) {
+      const next = { ...session };
+      delete (next as { revert?: unknown }).revert;
+      return next;
+    }
+    return session;
+  }
+
+  async listCommands(): Promise<Array<{ name: string; description?: string; agent?: string; model?: string; source?: string }>> {
+    return [];
+  }
+
+  async listCommandsWithDetails(): Promise<Array<{ name: string; description?: string; agent?: string; model?: string; source?: string; template?: string }>> {
+    return [];
+  }
+
+  async listSkillsWithDetails(): Promise<Array<{ name: string; description?: string; location: string; content?: string }>> {
+    const response = await codexClient.listSkills().catch(() => null);
+    return extractArray(response)
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+      .map((item) => ({
+        name: typeof item.name === 'string' ? item.name : '',
+        description: typeof item.description === 'string' ? item.description : undefined,
+        location: typeof item.location === 'string' ? item.location : '',
+        content: typeof item.content === 'string' ? item.content : undefined,
+      }))
+      .filter((item) => item.name && item.location);
+  }
+
+  async listLocalDirectory(directory?: string): Promise<Array<{ name: string; path: string; isDirectory: boolean; isFile: boolean; isSymbolicLink?: boolean }>> {
+    const apis = getRegisteredRuntimeAPIs();
+    const filesApi: FilesAPI | undefined = apis?.files;
+    if (!filesApi?.listDirectory) return [];
+    const result: DirectoryListResult = await filesApi.listDirectory(directory ?? this.getDirectory() ?? '/');
+    return result.entries.map((entry) => ({
+      name: entry.name,
+      path: entry.path,
+      isDirectory: entry.isDirectory,
+      isFile: !entry.isDirectory,
+    }));
+  }
+
+  async searchFiles(query: string, options?: { directory?: string | null; limit?: number; dirs?: boolean; type?: string; includeHidden?: boolean; respectGitignore?: boolean }): Promise<ProjectFileSearchHit[]> {
+    const directory = options?.directory ?? this.getDirectory();
+    const response = await runtimeFetch('/api/fs/search', {
+      query: {
+        q: query,
+        ...(directory ? { directory } : {}),
+        ...(typeof options?.limit === 'number' ? { limit: String(options.limit) } : {}),
+        ...(typeof options?.type === 'string' ? { type: options.type } : {}),
+        ...(options?.dirs === false ? { dirs: 'false' } : {}),
+      },
+    }).catch(() => null);
+    if (!response?.ok) return [];
+    const payload = await response.json().catch(() => null);
+    const items: unknown[] = Array.isArray(payload?.results) ? payload.results : Array.isArray(payload) ? payload : [];
+    return items
+      .map((item: unknown): ProjectFileSearchHit | null => {
+        const value = typeof item === 'string'
+          ? item
+          : item && typeof item === 'object' && typeof (item as { path?: unknown }).path === 'string'
+            ? (item as { path: string }).path
+            : null;
+        if (!value) return null;
+        const normalizedRelativePath = normalizeFsPath(value);
+        const name = normalizedRelativePath.split('/').filter(Boolean).pop() || normalizedRelativePath;
+        const normalizedPath = directory
+          ? normalizeFsPath(`${directory}/${normalizedRelativePath}`)
+          : normalizedRelativePath;
+        return {
+          name,
+          path: normalizedPath,
+          relativePath: normalizedRelativePath,
+          extension: name.includes('.') ? name.split('.').pop()?.toLowerCase() : undefined,
+        };
+      })
+      .filter((item): item is ProjectFileSearchHit => Boolean(item));
+  }
+
+  async getFilesystemHome(): Promise<string | null> {
+    const response = await runtimeFetch('/api/fs/home').catch(() => null);
+    if (!response?.ok) return null;
+    const payload = await response.json().catch(() => null);
+    return typeof payload?.home === 'string' ? payload.home : null;
+  }
+
+  async getSystemInfo(): Promise<{ homeDirectory?: string | null; [key: string]: unknown } | null> {
+    const response = await runtimeFetch('/api/system/info').catch(() => null);
+    if (!response?.ok) return null;
+    return await response.json().catch(() => null) as Record<string, unknown> | null;
+  }
+
+  async createDirectory(targetPath: string): Promise<void> {
+    const apis = getRegisteredRuntimeAPIs();
+    if (apis?.files?.createDirectory) {
+      await apis.files.createDirectory(targetPath);
+      return;
+    }
+    unsupported('createDirectory');
+  }
+
+  async cloneRepository(input: { url?: string; directory?: string; remoteUrl?: string; destinationPath?: string; gitIdentityId?: string | null }): Promise<{ path: string; [key: string]: unknown }> {
+    const response = await runtimeFetch('/api/git/clone', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => null);
+    if (response?.ok) {
+      const payload = await response.json().catch(() => null);
+      if (payload && typeof payload === 'object' && typeof (payload as { path?: unknown }).path === 'string') {
+        return payload as { path: string; [key: string]: unknown };
+      }
+    }
+    return { path: input.destinationPath ?? input.directory ?? '' };
+  }
+
+  async setCodexWorkingDirectory(directoryPath: string | null | undefined): Promise<DirectorySwitchResult | null> {
+    if (!directoryPath?.trim()) return null;
+    this.setDirectory(directoryPath);
+    return {
+      success: true,
+      restarted: false,
+      path: directoryPath,
+    };
+  }
+
+  private async abortSession(sessionId: string): Promise<void> {
+    const turnId = this.activeTurns.get(sessionId);
+    if (!turnId) return;
+    try {
+      await codexClient.interruptTurn(sessionId, turnId);
+    } finally {
+      this.activeTurns.delete(sessionId);
+    }
+  }
+
+  private async resolveRollbackTurnCount(sessionId: string, messageId?: string): Promise<number> {
+    if (!messageId) return 1;
+    const response = await codexClient.listThreadTurns(sessionId, {
+      limit: 500,
+      sortDirection: 'asc',
+      itemsView: 'full',
+    });
+    const turns = extractArray(response) as CodexTurn[];
+    if (turns.length === 0) return 1;
+    const turnIndex = turns.findIndex((turn) => {
+      const items = Array.isArray(turn.items) ? turn.items : [];
+      return items.some((item) => item && typeof item === 'object' && (item as { id?: unknown }).id === messageId);
+    });
+    if (turnIndex < 0) {
+      throw new Error('Cannot map the selected message to a Codex turn for rollback.');
+    }
+    return Math.max(1, turns.length - turnIndex);
+  }
+
+  private async openEventStream(options: CodexEventStreamOptions = {}): Promise<{ stream: AsyncIterable<unknown> }> {
+    const response = await runtimeFetch('/api/codex/events', {
+      signal: options.signal,
+      ...(options.headers ? { headers: options.headers } : {}),
+    });
+    if (!response.ok) {
+      throw new Error(`Codex event stream failed with ${response.status}`);
+    }
+    if (!response.body) {
+      throw new Error('Codex event stream response is not readable');
+    }
+
+    const stream = this.readCodexEventStream(response.body, options);
+    return { stream };
+  }
+
+  private async *readCodexEventStream(body: ReadableStream<Uint8Array>, options: CodexEventStreamOptions): AsyncIterable<unknown> {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let separator = buffer.search(/\r?\n\r?\n/);
+        while (separator >= 0) {
+          const block = buffer.slice(0, separator);
+          buffer = buffer.slice(separator + (buffer[separator] === '\r' ? 4 : 2));
+          const event = this.parseSseBlock(block);
+          if (!event) {
+            options.onSseEvent?.({});
+          }
+          if (event) {
+            options.onSseEvent?.({ id: event.id, event: event.event });
+            for (const translated of this.translateCodexEvent(event.data)) {
+              yield translated;
+            }
+          }
+          separator = buffer.search(/\r?\n\r?\n/);
+        }
+      }
+      const trailing = this.parseSseBlock(buffer);
+      if (trailing) {
+        options.onSseEvent?.({ id: trailing.id, event: trailing.event });
+        for (const translated of this.translateCodexEvent(trailing.data)) {
+          yield translated;
+        }
+      }
+    } catch (error) {
+      if (!options.signal?.aborted) {
+        options.onSseError?.(error);
+      }
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  private parseSseBlock(block: string): { id?: string; event?: string; data: unknown } | null {
+    const data: string[] = [];
+    let id: string | undefined;
+    let event: string | undefined;
+    for (const line of block.split(/\r?\n/)) {
+      if (!line || line.startsWith(':')) continue;
+      const colon = line.indexOf(':');
+      const field = colon >= 0 ? line.slice(0, colon) : line;
+      const value = colon >= 0 ? line.slice(colon + 1).replace(/^ /, '') : '';
+      if (field === 'id') id = value;
+      if (field === 'event') event = value;
+      if (field === 'data') data.push(value);
+    }
+    if (data.length === 0) return null;
+    try {
+      return { id, event, data: JSON.parse(data.join('\n')) };
+    } catch (error) {
+      throw new Error(`Failed to parse Codex SSE event: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private translateCodexEvent(raw: unknown): unknown[] {
+    const frame = raw && typeof raw === 'object' ? raw as Record<string, any> : null;
+    const method = typeof frame?.method === 'string' ? frame.method : '';
+    const params = frame?.params && typeof frame.params === 'object' ? frame.params as Record<string, any> : {};
+    const events: unknown[] = [];
+    const push = (threadId: string | null, payload: Event, directory?: string | null) => {
+      events.push({
+        directory: directory || this.getDirectory() || 'global',
+        payload,
+        threadId,
+        codexEvent: raw,
+      });
+    };
+
+    if (method === 'thread/started' && params.thread) {
+      const session = this.toSession(params.thread);
+      push(session.id, {
+        type: 'session.created',
+        properties: { info: session },
+      } as Event, session.directory as string | undefined);
+      return events;
+    }
+
+    if (method === 'thread/name/updated' && typeof params.threadId === 'string') {
+      push(params.threadId, {
+        type: 'session.updated',
+        properties: {
+          info: {
+            id: params.threadId,
+            title: typeof params.name === 'string' ? params.name : undefined,
+            time: { updated: Date.now() },
+          },
+        },
+      } as Event);
+      return events;
+    }
+
+    if (method === 'thread/deleted' && typeof params.threadId === 'string') {
+      push(params.threadId, {
+        type: 'session.deleted',
+        properties: { sessionID: params.threadId },
+      } as Event);
+      return events;
+    }
+
+    if (method === 'thread/status/changed' && typeof params.threadId === 'string') {
+      push(params.threadId, {
+        type: 'session.status',
+        properties: {
+          sessionID: params.threadId,
+          status: { type: params.status === 'running' || params.status === 'busy' ? 'busy' : 'idle' },
+        },
+      } as Event);
+      return events;
+    }
+
+    if (method === 'turn/started' && typeof params.threadId === 'string') {
+      if (typeof params.turn?.id === 'string') {
+        this.activeTurns.set(params.threadId, params.turn.id);
+      }
+      push(params.threadId, {
+        type: 'session.status',
+        properties: { sessionID: params.threadId, status: { type: 'busy' } },
+      } as Event);
+      return events;
+    }
+
+    if (method === 'turn/completed' && typeof params.threadId === 'string') {
+      this.activeTurns.delete(params.threadId);
+      push(params.threadId, {
+        type: 'session.status',
+        properties: { sessionID: params.threadId, status: { type: 'idle' } },
+      } as Event);
+      for (const record of this.toMessageRecords(params.threadId, params.turn)) {
+        push(params.threadId, {
+          type: 'message.updated',
+          properties: { info: record.info, parts: record.parts },
+        } as Event);
+      }
+      return events;
+    }
+
+    if ((method === 'item/started' || method === 'item/completed') && typeof params.threadId === 'string' && params.item) {
+      const record = this.toMessageRecord(params.threadId, params.item);
+      if (record) {
+        push(params.threadId, {
+          type: 'message.updated',
+          properties: { info: record.info, parts: record.parts },
+        } as Event);
+      }
+      return events;
+    }
+
+    if ((method === 'item/agentMessage/delta' || method === 'item/plan/delta') && typeof params.threadId === 'string') {
+      const itemId = typeof params.itemId === 'string' ? params.itemId : null;
+      const delta = typeof params.delta === 'string' ? params.delta : '';
+      if (itemId && delta) {
+        const messageId = this.toCompatMessageId(params.threadId, itemId);
+        push(params.threadId, {
+          type: 'message.part.delta',
+          properties: {
+            messageID: messageId,
+            partID: `${messageId}-text`,
+            field: 'text',
+            delta,
+          },
+        } as Event);
+      }
+      return events;
+    }
+
+    return events;
+  }
+
+  private toSession(thread: CodexThread): Session {
+    const id = typeof thread.id === 'string' ? thread.id : `thread_${Date.now().toString(16)}`;
+    const created = firstTimestamp(thread.createdAt, thread.timestamp, thread.updatedAt, thread.recencyAt) ?? Date.now();
+    const updated = firstTimestamp(thread.updatedAt, thread.recencyAt);
+    const directory = typeof thread.cwd === 'string'
+      ? thread.cwd
+      : typeof thread.path === 'string'
+        ? thread.path
+        : undefined;
+    const title = typeof thread.name === 'string' && thread.name.trim()
+      ? thread.name
+      : typeof thread.preview === 'string' && thread.preview.trim()
+        ? thread.preview
+        : undefined;
+    return {
+      id,
+      parentID: typeof thread.parentThreadId === 'string' ? thread.parentThreadId : undefined,
+      title,
+      directory,
+      time: {
+        created,
+        updated,
+        archived: thread.status === 'archived' ? updated ?? Date.now() : null,
+      },
+      metadata: {
+        directory,
+        codexThread: thread,
+      },
+      codexThread: thread,
+    };
+  }
+
+  private toMessageRecords(sessionId: string, turn: CodexTurn | null | undefined): CompatMessageRecord[] {
+    if (!turn || typeof turn !== 'object') return [];
+    const items = Array.isArray(turn.items) ? turn.items : [];
+    const records: CompatMessageRecord[] = [];
+    let parentUserMessageId: string | undefined;
+    for (const item of items) {
+      const record = this.toMessageRecord(sessionId, item, turn, item?.type === 'userMessage' ? undefined : parentUserMessageId);
+      if (record) records.push(record);
+      if (item?.type === 'userMessage' && typeof item.id === 'string') {
+        parentUserMessageId = item.id;
+      }
+    }
+    return records;
+  }
+
+  private toCompatMessageId(sessionId: string, itemId: string): string {
+    return `${sessionId}:${itemId}`;
+  }
+
+  private toMessageTime(item: CodexThreadItem, turn?: CodexTurn | null): CompatMessageTime {
+    const created = firstTimestamp(
+      item.createdAt,
+      item.startedAt,
+      item.startedAtMs,
+      item.completedAt,
+      item.completedAtMs,
+      turn?.startedAt,
+      turn?.completedAt,
+    ) ?? Date.now();
+    const updated = firstTimestamp(
+      item.updatedAt,
+      item.completedAt,
+      item.completedAtMs,
+      turn?.completedAt,
+    );
+    const completed = firstTimestamp(
+      item.completedAt,
+      item.completedAtMs,
+      turn?.completedAt,
+    );
+    return {
+      created,
+      ...(updated !== undefined ? { updated } : {}),
+      ...(completed !== undefined ? { completed } : {}),
+    };
+  }
+
+  private toMessageRecord(sessionId: string, item: CodexThreadItem, turn?: CodexTurn | null, parentID?: string): CompatMessageRecord | null {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string') return null;
+    const messageId = this.toCompatMessageId(sessionId, item.id);
+    const time = this.toMessageTime(item, turn);
+    const assistantOptions = this.toAssistantMessageOptions(
+      item,
+      turn,
+      parentID ? this.toCompatMessageId(sessionId, parentID) : undefined,
+    );
+    if (item.type === 'userMessage') {
+      return this.toUserMessageRecord(sessionId, messageId, Array.isArray(item.content) ? item.content : [], time);
+    }
+    if (item.type === 'agentMessage') {
+      return this.toTextMessageRecord(sessionId, messageId, 'assistant', this.readTextContent(item), time, assistantOptions);
+    }
+    if (item.type === 'plan') {
+      return this.toTextMessageRecord(sessionId, messageId, 'assistant', this.readTextContent(item), time, assistantOptions);
+    }
+    if (item.type === 'reasoning') {
+      const text = [
+        ...(Array.isArray(item.summary) ? item.summary : []),
+        ...(Array.isArray(item.content) ? item.content : []),
+      ].filter((value) => typeof value === 'string' && value.length > 0).join('\n');
+      return {
+        info: { id: messageId, sessionID: sessionId, role: 'assistant', time, ...assistantOptions },
+        parts: [{ id: `${messageId}-reasoning`, messageID: messageId, type: 'reasoning', text }],
+      };
+    }
+    return {
+      info: { id: messageId, sessionID: sessionId, role: 'assistant', time, ...assistantOptions },
+      parts: [{
+        id: `${messageId}-tool`,
+        messageID: messageId,
+        type: 'tool',
+        tool: item.tool ?? item.type,
+        callID: item.id,
+        state: {
+          status: item.status,
+          input: item.arguments ?? item.command ?? item.changes,
+          output: item.result ?? item.aggregatedOutput ?? item.error ?? item.contentItems,
+          metadata: item,
+        },
+      }],
+    };
+  }
+
+  private toAssistantMessageOptions(item: CodexThreadItem, turn?: CodexTurn | null, parentID?: string): CompatMessageOptions {
+    const isCompleted = turn?.status === 'completed'
+      || item.status === 'completed'
+      || item.phase === 'final_answer'
+      || firstTimestamp(item.completedAt, item.completedAtMs, turn?.completedAt) !== undefined;
+    return {
+      ...(parentID ? { parentID } : {}),
+      ...(isCompleted ? { status: 'completed', finish: 'stop' } : {}),
+    };
+  }
+
+  private readTextContent(item: CodexThreadItem): string {
+    if (typeof item.text === 'string') return item.text;
+    if (Array.isArray(item.content)) {
+      return item.content
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (part && typeof part === 'object' && typeof (part as Record<string, unknown>).text === 'string') {
+            return (part as { text: string }).text;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+    if (typeof item.content === 'string') return item.content;
+    return '';
+  }
+
+  private toTextMessageRecord(sessionId: string, id: string, role: string, text: string, time: CompatMessageTime = { created: Date.now() }, options: CompatMessageOptions = {}): CompatMessageRecord {
+    return {
+      info: { id, sessionID: sessionId, role, time, ...options },
+      parts: [{ id: `${id}-text`, messageID: id, type: 'text', text }],
+    };
+  }
+
+  private toUserMessageRecord(sessionId: string, id: string, input: unknown[], time: CompatMessageTime = { created: Date.now() }): CompatMessageRecord {
+    const parts = input
+      .map((part, index): Part | null => {
+        if (!part || typeof part !== 'object') return null;
+        const record = part as Record<string, any>;
+        if (record.type === 'text') {
+          return {
+            id: `${id}-text-${index}`,
+            messageID: id,
+            type: 'text',
+            text: typeof record.text === 'string' ? record.text : '',
+          };
+        }
+        if ((record.type === 'image' || record.type === 'localImage') && typeof (record.url ?? record.path) === 'string') {
+          return {
+            id: `${id}-file-${index}`,
+            messageID: id,
+            type: 'file',
+            url: record.url ?? record.path,
+            mime: 'image/*',
+          };
+        }
+        return {
+          id: `${id}-input-${index}`,
+          messageID: id,
+          type: String(record.type ?? 'input'),
+          ...record,
+        };
+      })
+      .filter((part): part is Part => Boolean(part));
+    return {
+      info: { id, sessionID: sessionId, role: 'user', time },
+      parts,
+    };
+  }
+
+  private extractThreadId(value: unknown): string | null {
+    if (!value || typeof value !== 'object') return null;
+    const record = value as Record<string, unknown>;
+    if (typeof record.id === 'string') return record.id;
+    if (typeof record.threadId === 'string') return record.threadId;
+    const thread = record.thread;
+    if (thread && typeof thread === 'object' && typeof (thread as { id?: unknown }).id === 'string') {
+      return (thread as { id: string }).id;
+    }
+    return null;
+  }
+}
+
+export const codexRuntimeClient = new CodexCompatClient();

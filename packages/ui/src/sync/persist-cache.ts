@@ -7,7 +7,7 @@
  * from the server via SSE bootstrap.
  */
 
-import type { Session, VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { Session, VcsInfo } from "@/lib/codex/types"
 import type { ProjectMeta } from "./types"
 
 /** Cap persisted session lists so localStorage stays bounded per directory. */

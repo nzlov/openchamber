@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, mock } from "bun:test"
 import { create, type StoreApi } from "zustand"
-import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2/client"
+import type { PermissionRequest, QuestionRequest } from "@/lib/codex/types"
 
 const listPendingQuestionsCalls: Array<{ directories?: Array<string | null | undefined> }> = []
 const listPendingPermissionsCalls: Array<{ directories?: Array<string | null | undefined> }> = []
@@ -9,8 +9,8 @@ let pendingPermissionsResponse: PermissionRequest[] = []
 let pendingQuestionsShouldThrow = false
 let pendingPermissionsShouldThrow = false
 
-mock.module("@/lib/opencode/client", () => ({
-  opencodeClient: {
+mock.module("@/lib/codex/runtime-client", () => ({
+  codexRuntimeClient: {
     listPendingQuestions: mock(async (opts?: { directories?: Array<string | null | undefined> }) => {
       listPendingQuestionsCalls.push(opts ?? {})
       if (pendingQuestionsShouldThrow) throw new Error("question.list failed: simulated")

@@ -5,7 +5,7 @@
  * session-actions) use them to read child-store domain data without hooks.
  */
 
-import type { Config, OpencodeClient } from "@opencode-ai/sdk/v2/client"
+import type { Config, CodexRuntimeSdkClient } from "@/lib/codex/types"
 import type { ChildStoreManager } from "./child-store"
 import { getSessionMaterializationStatus } from "./materialization"
 import type { State } from "./types"
@@ -16,7 +16,7 @@ let _registerSessionDirectory: ((sessionID: string, directory: string) => void) 
 const configListeners = new Set<(directory: string, config: Config) => void>()
 
 export function setSyncRefs(
-  _sdk: OpencodeClient,
+  _sdk: CodexRuntimeSdkClient,
   childStores: ChildStoreManager,
   directory: string,
   registerSessionDirectory?: (sessionID: string, directory: string) => void,
@@ -49,7 +49,7 @@ export function getDirectoryState(directory?: string): State | undefined {
   return stores.getState(dir)
 }
 
-/** Read resolved OpenCode config from a directory child store, if bootstrapped. */
+/** Read resolved Codex config from a directory child store, if bootstrapped. */
 export function getSyncConfig(directory?: string): Config | undefined {
   const config = getDirectoryState(directory)?.config
   return config && Object.keys(config).length > 0 ? config : undefined

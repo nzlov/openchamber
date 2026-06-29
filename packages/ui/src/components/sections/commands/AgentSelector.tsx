@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Agent } from '@opencode-ai/sdk/v2';
+import type { Agent } from '@/lib/codex/types';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { MobileOverlayPanel } from '@/components/ui/MobileOverlayPanel';
 import { Icon } from "@/components/icon/Icon";
 import { useI18n } from '@/lib/i18n';
-import { useOpenCodeReadiness } from '@/hooks/useOpenCodeReadiness';
+import { useCodexReadiness } from '@/hooks/useCodexReadiness';
 
 interface AgentSelectorProps {
     agentName: string;
@@ -32,7 +32,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
     dropdownPortalToBody = false,
 }) => {
     const { t } = useI18n();
-    const { isReady, isUnavailable } = useOpenCodeReadiness();
+    const { isReady, isUnavailable } = useCodexReadiness();
     const configAgents = useConfigStore((state) => state.agents);
     const agentsStoreAgents = useAgentsStore((state) => state.agents);
     const loadAgentsStore = useAgentsStore((state) => state.loadAgents);

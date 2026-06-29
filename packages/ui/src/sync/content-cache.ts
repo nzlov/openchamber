@@ -1,6 +1,6 @@
 /**
  * File content LRU cache — dual constraint eviction.
- * Port of OpenCode's content-cache.ts.
+ * Port of Codex's content-cache.ts.
  *
  * Evicts when either entry count exceeds MAX_FILE_CONTENT_ENTRIES
  * or total byte estimate exceeds MAX_FILE_CONTENT_BYTES.

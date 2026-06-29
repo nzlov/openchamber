@@ -13,7 +13,7 @@ interface PaceIndicatorProps {
 
 /**
  * Visual indicator showing whether usage is on track, slightly fast, or too fast.
- * Inspired by opencode-bar's pace visualization.
+ * Inspired by codex-bar's pace visualization.
  */
 export const PaceIndicator: React.FC<PaceIndicatorProps> = ({
   paceInfo,

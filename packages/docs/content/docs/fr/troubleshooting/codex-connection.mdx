@@ -1,0 +1,32 @@
+---
+title: Connexion à Codex
+description: Corrigez OpenChamber lorsqu’il ne se connecte pas à son serveur Codex.
+---
+
+# Connexion à Codex
+
+Si OpenChamber se charge mais reste bloqué sur « Codex redémarre », ou si le chat ne répond pas, le serveur auquel il parle n’est pas joignable. Suivez ces vérifications.
+
+## Il reste bloqué sur « Codex redémarre »
+
+- laissez-lui un moment juste après le lancement — cet état est normal pendant le démarrage du serveur
+- vérifiez si le serveur est vivant avec `openchamber status`
+- redémarrez-le avec `openchamber restart`
+- consultez les détails de démarrage avec `openchamber logs`
+
+## Vous vous connectez à votre propre serveur
+
+Si vous avez configuré OpenChamber pour utiliser un serveur existant, revérifiez la configuration depuis [Serveur Codex](/codex-server/) :
+
+- si l’adresse est invalide, OpenChamber l’ignore et démarre son propre serveur à la place — cherchez un avertissement `[config]` dans les logs
+
+## Toujours en échec
+
+- confirmez que Node.js est en version `20` ou plus récente
+- réinstallez la dernière CLI
+- ouvrez `http://localhost:3000` directement avant de tester un tunnel ou lien distant
+
+## Pages liées
+
+- [Serveur Codex](/codex-server/) — comment OpenChamber trouve et gère le serveur
+- [Dépannage](/troubleshooting/) — autres problèmes courants

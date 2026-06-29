@@ -1,5 +1,5 @@
 import type { BridgeContext, BridgeResponse } from './bridge';
-import { waitForApiUrl } from './opencode-ready';
+import { waitForApiUrl } from './codex-ready';
 
 type BridgeMessageInput = {
   id: string;
@@ -71,9 +71,9 @@ const proxyAbortControllers = new Map<string, AbortController>();
 // On cold start the webview's two data layers — the sync bootstrap and the
 // config store — fire the SAME idempotent reads (config, path, agents, agent,
 // project, command) concurrently through the bridge with no shared dedup. That
-// saturates the single OpenCode process and delays everything queued behind it
+// saturates the single Codex process and delays everything queued behind it
 // (e.g. createSession). Coalesce genuinely-concurrent identical GETs to those
-// read endpoints so OpenCode does the work once; every caller gets its own
+// read endpoints so Codex does the work once; every caller gets its own
 // response payload copy.
 //
 // Scope is deliberately tight: GET only, an allowlist of read paths. The shared
@@ -111,7 +111,7 @@ const performApiProxyFetch = async (
       status: 502,
       headers: { 'content-type': 'application/json' },
       bodyText: JSON.stringify({
-        error: error instanceof Error ? error.message : 'Failed to reach OpenCode API',
+        error: error instanceof Error ? error.message : 'Failed to reach Codex API',
       }),
     };
   }
@@ -168,7 +168,7 @@ export async function handleProxyBridgeMessage(
       const targetUrl = new URL(normalizedPath.replace(/^\/+/, ''), base).toString();
       const requestHeaders: Record<string, string> = {
         ...deps.sanitizeForwardHeaders(headers),
-        ...ctx?.manager?.getOpenCodeAuthHeaders(),
+        ...ctx?.manager?.getRuntimeAuthHeaders(),
       };
 
       const requestBody =
@@ -177,7 +177,7 @@ export async function handleProxyBridgeMessage(
           : undefined;
 
       // Coalesce concurrent identical GET reads to idempotent endpoints so the
-      // single OpenCode process serves them once. The shared fetch carries no
+      // single Codex process serves them once. The shared fetch carries no
       // AbortController (api:proxy:abort can't cancel these reads), so one
       // caller aborting can't strand the others.
       const coalesceKey =
@@ -245,7 +245,7 @@ export async function handleProxyBridgeMessage(
       const targetUrl = new URL(normalizedPath.replace(/^\/+/, ''), base).toString();
       const requestHeaders: Record<string, string> = {
         ...deps.sanitizeForwardHeaders(headers),
-        ...ctx?.manager?.getOpenCodeAuthHeaders(),
+        ...ctx?.manager?.getRuntimeAuthHeaders(),
       };
       const timeoutSignal = AbortSignal.timeout(45000);
       const abortController = new AbortController();
@@ -287,7 +287,7 @@ export async function handleProxyBridgeMessage(
           ((error as Error & { name?: string }).name === 'TimeoutError' ||
             (error as Error & { name?: string }).name === 'AbortError');
         const body = JSON.stringify({
-          error: isTimeout ? 'OpenCode message forward timed out' : error instanceof Error ? error.message : 'OpenCode message forward failed',
+          error: isTimeout ? 'Codex message forward timed out' : error instanceof Error ? error.message : 'Codex message forward failed',
         });
         const data: ApiProxyResponsePayload = {
           status: isTimeout ? 504 : 503,

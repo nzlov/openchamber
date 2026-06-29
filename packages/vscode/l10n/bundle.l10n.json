@@ -13,10 +13,10 @@
   "OpenChamber [Improve Code]: No active editor": "OpenChamber [Improve Code]: No active editor",
   "OpenChamber [Improve Code]: No text selected": "OpenChamber [Improve Code]: No text selected",
   "Improve the following Code:": "Improve the following Code:",
-  "OpenCode CLI not found. Install it and ensure it's in PATH.": "OpenCode CLI not found. Install it and ensure it's in PATH.",
-  "OpenCode CLI not found. Please install it and ensure it's in PATH.": "OpenCode CLI not found. Please install it and ensure it's in PATH.",
+  "Codex CLI not found. Install it and ensure it's in PATH.": "Codex CLI not found. Install it and ensure it's in PATH.",
+  "Codex CLI not found. Please install it and ensure it's in PATH.": "Codex CLI not found. Please install it and ensure it's in PATH.",
   "More Info": "More Info",
-  "Failed to start OpenCode: {0}": "Failed to start OpenCode: {0}",
+  "Failed to start Codex: {0}": "Failed to start Codex: {0}",
   "New Session": "New Session",
   "Session": "Session",
   "Agent Manager": "Agent Manager"

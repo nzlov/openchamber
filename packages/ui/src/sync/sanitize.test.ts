@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { Session } from '@opencode-ai/sdk/v2'
+import type { Session } from '@/lib/codex/types'
 
 import { stripSessionDiffSnapshots, stripSessionListDetails } from './sanitize'
 

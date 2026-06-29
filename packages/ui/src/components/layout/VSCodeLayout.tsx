@@ -37,7 +37,7 @@ import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { formatTimeForPreference } from '@/lib/timeFormat';
 import { lazyWithChunkRecovery } from '@/lib/chunkLoadRecovery';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import type { UsageWindow } from '@/types';
 import type { SessionContextUsage } from '@/stores/types/sessionTypes';
 import { useUIStore, type TimeFormatPreference } from '@/stores/useUIStore';
@@ -397,7 +397,7 @@ export const VSCodeLayout: React.FC = () => {
         }
 
         const configState = useConfigStore.getState();
-        // If OpenCode is still warming up, the initial provider/agent loads can fail and be swallowed by retries.
+        // If Codex is still warming up, the initial provider/agent loads can fail and be swallowed by retries.
         // Only mark bootstrap complete when core datasets are present so we keep retrying on cold starts.
         if (!configState.isInitialized || !configState.isConnected || configState.providers.length === 0 || configState.agents.length === 0) {
           return;

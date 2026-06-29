@@ -3,7 +3,6 @@ import { onCommand, onThemeChange, proxyApiRequest, proxySessionMessageRequest, 
 import { vscodeStreamPerfCount, vscodeStreamPerfMeasure, vscodeStreamPerfObserve } from './api/streamPerf';
 import { extractBodyBase64, extractBodyText, extractJsonBody, hasInitBody } from './requestBodyTransport';
 import type { RuntimeAPIs } from '@openchamber/ui/lib/api/types';
-import { opencodeClient } from '@openchamber/ui/lib/opencode/client';
 import { sanitizeHeadersForBrowser } from '@openchamber/ui/lib/runtime-fetch';
 import {
   buildVSCodeThemeFromPalette,
@@ -149,7 +148,7 @@ const maybeHideLoadingOverlay = () => {
 
   if (connectionStatus === 'connected') {
     // The UI hydrates pickers and the sidebar from cache and refreshes
-    // providers/agents in the background, so once it's mounted and OpenCode is
+    // providers/agents in the background, so once it's mounted and Codex is
     // connected there's real interactive content underneath the splash. Don't
     // keep the overlay up waiting on the live provider/agent fetches — on a cold
     // start those are the slowest tail, and gating on them makes the splash
@@ -298,9 +297,9 @@ const getRequestDirectoryHint = (url: URL, input?: RequestInfo | URL, init?: Req
   const queryDirectory = url.searchParams.get('directory') || undefined;
   if (queryDirectory) return queryDirectory;
   const headers = getRequestHeaders(input, init);
-  const directoryEncoding = Object.entries(headers).find(([key]) => key.toLowerCase() === 'x-opencode-directory-encoding')?.[1];
+  const directoryEncoding = Object.entries(headers).find(([key]) => key.toLowerCase() === 'x-codex-directory-encoding')?.[1];
   for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === 'x-opencode-directory') {
+    if (key.toLowerCase() === 'x-codex-directory') {
       // headersToRecord marks encoded directory hints so direct/raw percent
       // sequences from other callers are not decoded accidentally.
       if (directoryEncoding !== 'uri') return value;
@@ -326,6 +325,81 @@ const jsonResponse = (body: unknown, status = 200): Response => {
 
 const unsupportedWebRouteResponse = (feature: string): Response => {
   return jsonResponse({ error: `${feature} is not supported in VS Code` }, 501);
+};
+
+const CODEX_VSCODE_UNAVAILABLE_MESSAGE = 'Codex runtime API is not available in VS Code yet';
+
+const getVSCodeCodexRuntime = () => ({
+  status: 'unsupported',
+  running: false,
+  ready: false,
+  initialized: false,
+  transport: 'vscode',
+  binary: 'codex',
+  pid: null,
+  error: CODEX_VSCODE_UNAVAILABLE_MESSAGE,
+});
+
+const codexUnavailableResponse = () => jsonResponse({
+  error: {
+    message: CODEX_VSCODE_UNAVAILABLE_MESSAGE,
+  },
+  runtime: getVSCodeCodexRuntime(),
+}, 501);
+
+const handleCodexApiRequest = (pathname: string, method: string): Response | null => {
+  if (!pathname.startsWith('/api/codex')) return null;
+
+  const runtime = getVSCodeCodexRuntime();
+
+  if (method === 'GET') {
+    if (pathname === '/api/codex/health') {
+      return jsonResponse({ healthy: false, ready: false, runtime });
+    }
+    if (pathname === '/api/codex/capabilities') {
+      return jsonResponse({
+        transport: 'vscode',
+        experimentalApi: true,
+        methods: [],
+        unsupported: {
+          vscodeAppServerBridge: true,
+          legacyCompatibility: false,
+        },
+        configFields: [],
+        runtime,
+      });
+    }
+    if (pathname === '/api/codex/events') {
+      const body = `event: codex\ndata: ${JSON.stringify({ sequence: 0, method: 'runtime.unavailable', params: { message: CODEX_VSCODE_UNAVAILABLE_MESSAGE }, raw: null })}\n\n`;
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+        },
+      });
+    }
+    if (pathname === '/api/codex/threads') {
+      return jsonResponse({ threads: [], items: [], nextCursor: null, runtime });
+    }
+    if (pathname === '/api/codex/approvals') {
+      return jsonResponse({ approvals: [], runtime });
+    }
+    if (pathname === '/api/codex/config') {
+      return jsonResponse({ config: {}, supportedFields: [], raw: {}, runtime });
+    }
+    if (pathname === '/api/codex/models') {
+      return jsonResponse({ providers: [], models: [], runtime });
+    }
+    if (pathname === '/api/codex/mcp') {
+      return jsonResponse({ servers: [], runtime });
+    }
+    if (pathname === '/api/codex/skills') {
+      return jsonResponse({ skills: [], runtime });
+    }
+  }
+
+  return codexUnavailableResponse();
 };
 
 const pluginConfigErrorStatus = (message: string): number => {
@@ -361,6 +435,11 @@ const isLocalRuntimePath = (pathname: string) => isApiPath(pathname) || pathname
 const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: RequestInit | undefined, method: string) => {
   const pathname = url.pathname;
   const normalizedPathname = pathname !== '/' ? pathname.replace(/\/+$/, '') : pathname;
+
+  const codexResponse = handleCodexApiRequest(normalizedPathname, method);
+  if (codexResponse) {
+    return codexResponse;
+  }
 
   if (normalizedPathname === '/api/system/info' && method === 'GET') {
     const config = window.__VSCODE_CONFIG__;
@@ -527,7 +606,8 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
     const cliAvailable = window.__OPENCHAMBER_CONNECTION__?.cliAvailable ?? true;
     return new Response(JSON.stringify({ 
       status: isReady ? 'ok' : 'connecting', 
-      isOpenCodeReady: isReady,
+      ready: isReady,
+      isCodexReady: isReady,
       cliAvailable,
     }), {
       status: 200,
@@ -829,16 +909,6 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
     }
   }
 
-  if (pathname === '/api/config/opencode-resolution' && method === 'GET') {
-    try {
-      const data = await sendBridgeMessage('api:config/opencode-resolution:get');
-      return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-  }
-
   if (pathname.startsWith('/api/config/reload')) {
     await sendBridgeMessage('api:config/reload');
     return new Response(JSON.stringify({ restarted: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -946,24 +1016,6 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
     }
   }
 
-  if (pathname === '/api/opencode/version' && method === 'GET') {
-    try {
-      const data = await sendBridgeMessage('api:opencode/version');
-      return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return new Response(JSON.stringify({ version: null, error: message }), { status: 502, headers: { 'Content-Type': 'application/json' } });
-    }
-  }
-
-  if (pathname === '/api/opencode/health' && method === 'GET') {
-    const connectionStatus = window.__OPENCHAMBER_CONNECTION__?.status;
-    return new Response(JSON.stringify({ healthy: connectionStatus === 'connected' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
   if (pathname === '/api/zen/models' && method === 'GET') {
     try {
       const data = await sendBridgeMessage('api:zen:models');
@@ -1006,12 +1058,6 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
       authenticatedAt: Date.now(),
     };
     return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }
-
-  if (pathname.startsWith('/api/opencode/directory')) {
-    const body = await extractJsonBody(input, init, method);
-    const result = await sendBridgeMessage('api:opencode/directory', { path: body.path });
-    return new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
   if (pathname === '/api/quota/providers') {
@@ -1081,7 +1127,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const cliAvailable = window.__OPENCHAMBER_CONNECTION__?.cliAvailable ?? true;
     return new Response(JSON.stringify({ 
       status: isReady ? 'ok' : 'connecting', 
-      isOpenCodeReady: isReady,
+      ready: isReady,
+      isCodexReady: isReady,
       cliAvailable,
     }), {
       status: 200,
@@ -1367,12 +1414,11 @@ onCommand('showSettings', () => {
   window.dispatchEvent(new CustomEvent('openchamber:navigate', { detail: { view: 'settings' } }));
 });
 
-// Run the same full OpenCode reload flow the app uses after an update: shows the
-// reload overlay, restarts the managed OpenCode (via the bridge's /api/config/reload),
-// and refreshes config/data. Triggered by the "Restart API Connection" command.
-onCommand('reloadOpenCode', () => {
-  void import('@openchamber/ui/stores/useAgentsStore').then(({ reloadOpenCodeConfiguration }) => {
-    void reloadOpenCodeConfiguration().catch(() => undefined);
+// Run the same full runtime reload flow the app uses after an update: shows the
+// reload overlay, restarts the managed API connection, and refreshes config/data.
+onCommand('reloadApi', () => {
+  void import('@openchamber/ui/stores/useAgentsStore').then(({ reloadRuntimeConfiguration }) => {
+    void reloadRuntimeConfiguration().catch(() => undefined);
   });
 });
 
@@ -1544,42 +1590,10 @@ const extractNotificationLastMessage = (payload: Record<string, unknown>): strin
   return extractNotificationTextFromParts(info.parts ?? properties.parts) || extractNotificationTextFromParts(info.content);
 };
 
-const fetchLastAssistantMessageText = async (sessionId: string, messageId?: string): Promise<string> => {
-  if (!sessionId) return '';
-
-  try {
-    const messages = await opencodeClient.getSessionMessages(sessionId, 5);
-    if (!Array.isArray(messages)) return '';
-
-    let target = messageId
-      ? messages.find((message) => {
-          const info = message && typeof message === 'object'
-            ? (message as { info?: { id?: unknown; role?: unknown } }).info
-            : undefined;
-          return info?.id === messageId && info?.role === 'assistant';
-        })
-      : null;
-
-    if (!target) {
-      for (let index = messages.length - 1; index >= 0; index -= 1) {
-        const message = messages[index];
-        const info = message && typeof message === 'object'
-          ? (message as { info?: { role?: unknown; finish?: unknown } }).info
-          : undefined;
-        if (info?.role === 'assistant' && info?.finish === 'stop') {
-          target = message;
-          break;
-        }
-      }
-    }
-
-    if (!target || typeof target !== 'object') return '';
-    const message = target as { parts?: unknown; content?: unknown; info?: { parts?: unknown; content?: unknown } };
-    return extractNotificationTextFromParts(message.parts ?? message.info?.parts)
-      || extractNotificationTextFromParts(message.content ?? message.info?.content);
-  } catch {
-    return '';
-  }
+const fetchLastAssistantMessageText = async (_sessionId: string, _messageId?: string): Promise<string> => {
+  void _sessionId;
+  void _messageId;
+  return '';
 };
 
 const getNotificationTemplate = (

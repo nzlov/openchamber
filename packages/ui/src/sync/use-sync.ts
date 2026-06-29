@@ -1,5 +1,5 @@
 import { useCallback, useRef, useMemo } from "react"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@/lib/codex/types"
 import { Binary } from "./binary"
 import { retry } from "./retry"
 import { SESSION_CACHE_LIMIT, type State } from "./types"

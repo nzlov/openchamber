@@ -586,7 +586,7 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
     if (normalizedFromMeta) {
       const looksLikeCorruptedSelfTarget =
         normalizedFromMeta === current &&
-        normalizedFromMeta.startsWith('opencode/') &&
+        normalizedFromMeta.startsWith('codex/') &&
         normalizedRoot.length > 0 &&
         normalizedRoot !== normalizedFromMeta;
 

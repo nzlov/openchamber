@@ -1,10 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useEffect, useRef, useCallback, useMemo } from "react"
-import type { Event, Message, Part } from "@opencode-ai/sdk/v2/client"
-import type { Session } from "@opencode-ai/sdk/v2"
+import type { Event, Message, Part } from "@/lib/codex/types"
+import type { Session } from "@/lib/codex/types"
 import type { StoreApi } from "zustand"
 import { useStore } from "zustand"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
+import type { CodexRuntimeSdkClient } from "@/lib/codex/types"
 import { createEventPipeline } from "./event-pipeline"
 import { isVSCodeRuntime } from "@/lib/desktop"
 import { isMobileSurfaceRuntime } from "@/lib/runtimeSurface"
@@ -27,7 +27,7 @@ import { setSyncRefs, getAllSyncSessions } from "./sync-refs"
 import { stripMessageDiffSnapshots, stripSessionDiffSnapshots } from "./sanitize"
 import { syncDebug } from "./debug"
 import { getReconnectCandidateSessionIds } from "./reconnect-recovery"
-import { opencodeClient } from "@/lib/opencode/client"
+import { codexRuntimeClient } from "@/lib/codex/runtime-client"
 import { usePermissionStore } from "@/stores/permissionStore"
 import { useConfigStore } from "@/stores/useConfigStore"
 import { useTodosPersistStore } from "@/stores/useTodosPersistStore"
@@ -35,7 +35,7 @@ import { toast } from "@/components/ui"
 import { appendNotification } from "./notification-store"
 import { applyGlobalSessionStatusEvent } from "./global-session-status"
 import type { State } from "./types"
-import type { SessionStatus } from "@opencode-ai/sdk/v2/client"
+import type { SessionStatus } from "@/lib/codex/types"
 import type { PermissionRequest } from "@/types/permission"
 import type { QuestionRequest } from "@/types/question"
 import * as sessionActions from "./session-actions"
@@ -56,7 +56,7 @@ import { EMPTY_USER_MESSAGE_HISTORY_SNAPSHOT, buildUserMessageHistorySnapshot, t
 
 type SyncSystem = {
   childStores: ChildStoreManager
-  sdk: OpencodeClient
+  sdk: CodexRuntimeSdkClient
   directory: string
 }
 
@@ -235,7 +235,7 @@ async function materializeSessionFromServer(
   store: StoreApi<DirectoryStore>,
   options?: { isStale?: () => boolean },
 ) {
-  const scopedClient = opencodeClient.getScopedSdkClient(directory)
+  const scopedClient = codexRuntimeClient.getScopedSdkClient(directory)
   const result = await retry(async () => {
     const response = await scopedClient.session.messages({ sessionID, limit: SESSION_MATERIALIZATION_MESSAGE_LIMIT })
     assertSdkSuccess(response, "session.messages")
@@ -397,7 +397,7 @@ function getViewedSessionMaterializationTarget(directory: string) {
   }
 }
 
-function toSessionStatus(status: Awaited<ReturnType<typeof opencodeClient.getSessionStatus>>[string] | undefined): SessionStatus | undefined {
+function toSessionStatus(status: Awaited<ReturnType<typeof codexRuntimeClient.getSessionStatus>>[string] | undefined): SessionStatus | undefined {
   if (!status) return undefined
   if (status.type === "idle" || status.type === "busy") {
     return { type: status.type }
@@ -426,7 +426,7 @@ function getActiveSessionCandidateIds(directory: string, state: DirectoryStore):
 }
 
 type DirectorySessionStatusSnapshot = NonNullable<
-  Awaited<ReturnType<typeof opencodeClient.getSessionStatusForDirectory>>
+  Awaited<ReturnType<typeof codexRuntimeClient.getSessionStatusForDirectory>>
 >
 
 // How a /session/status snapshot is reconciled into the store.
@@ -494,7 +494,7 @@ async function resyncDirectorySessionStatuses(
   candidateSessionIds: string[],
   mode: StatusSnapshotMode,
 ): Promise<DirectorySessionStatusSnapshot | null> {
-  const nextStatuses = await opencodeClient.getSessionStatusForDirectory(directory)
+  const nextStatuses = await codexRuntimeClient.getSessionStatusForDirectory(directory)
   // null = fetch failed; preserve existing state. {} or populated = a snapshot
   // of active sessions — reconciled per `mode` (absence ≠ idle under monotonic).
   if (nextStatuses === null) return null
@@ -1043,7 +1043,7 @@ export async function resyncBlockingRequestsForDirectory(
     const beforeSignatures = new Map(
       candidates.map((sessionId) => [sessionId, requestSignature(before.question[sessionId])]),
     )
-    const pendingQuestions = await opencodeClient.listPendingQuestions({ directories: [directory] })
+    const pendingQuestions = await codexRuntimeClient.listPendingQuestions({ directories: [directory] })
     const grouped: Record<string, QuestionRequest[]> = {}
     for (const q of pendingQuestions) {
       if (!q?.id || !q.sessionID) continue
@@ -1102,7 +1102,7 @@ export async function resyncBlockingRequestsForDirectory(
     const beforeSignatures = new Map(
       candidates.map((sessionId) => [sessionId, requestSignature(before.permission[sessionId])]),
     )
-    const pendingPermissions = await opencodeClient.listPendingPermissions({ directories: [directory] })
+    const pendingPermissions = await codexRuntimeClient.listPendingPermissions({ directories: [directory] })
     const grouped: Record<string, PermissionRequest[]> = {}
     for (const permission of pendingPermissions) {
       if (!permission?.id || !permission.sessionID) continue
@@ -1195,7 +1195,7 @@ async function resyncDirectoryAfterReconnect(
 
   await resyncDirectorySessionStatuses(directory, store, candidateSessionIds, "authoritative")
 
-  const scopedClient = opencodeClient.getScopedSdkClient(directory)
+  const scopedClient = codexRuntimeClient.getScopedSdkClient(directory)
   await Promise.all(candidateSessionIds.map(async (sessionId) => {
     const [sessionResponse, messageResponse] = await Promise.all([
       retry(async () => {
@@ -1499,6 +1499,7 @@ function handleEvent(
       break
     case "message.updated":
       draft.message = { ...current.message }
+      draft.part = { ...current.part }
       break
     case "message.removed":
       draft.message = { ...current.message }
@@ -1574,13 +1575,8 @@ function handleEvent(
 // Provider
 // ---------------------------------------------------------------------------
 
-const dispatchOpenCodeUpdateAvailable = (payload: { version: string }) => {
-  if (typeof window === "undefined") return
-  window.dispatchEvent(new CustomEvent("openchamber:opencode-update-available", { detail: payload }))
-}
-
 export function SyncProvider(props: {
-  sdk: OpencodeClient
+  sdk: CodexRuntimeSdkClient
   directory: string
   children: React.ReactNode
 }) {
@@ -1687,7 +1683,7 @@ export function SyncProvider(props: {
 
               const sessions = rootSessions.concat(childSessions)
               // Race guard: if the list came back empty but event pipeline
-              // already populated the store, don't clobber. OpenCode can
+              // already populated the store, don't clobber. Codex can
               // answer HTTP with empty sessions while WS delivers session
               // events for the same data (disk warmup race on app launch).
               const currentSessions = store.getState().session
@@ -1703,7 +1699,7 @@ export function SyncProvider(props: {
           })
 
           // VS Code-only race: the bridge can answer with an empty 200 (instead
-          // of a retryable 503) while OpenCode is still warming up, which the two
+          // of a retryable 503) while Codex is still warming up, which the two
           // retry layers inside loadSessions can't catch. Re-run a few times there.
           //
           // On web/desktop this retry is both redundant and harmful: loadSessions
@@ -1783,14 +1779,6 @@ export function SyncProvider(props: {
         // quiet session, triggering redundant full resyncs every ~15s.
         lastStreamActivityAtRef.current = Date.now()
         dispatchVSCodeRuntimeNotificationEvent(directory, payload)
-        if (payload.type === "installation.update-available") {
-          const version = typeof (payload.properties as { version?: unknown })?.version === "string"
-            ? (payload.properties as { version: string }).version
-            : ""
-          if (version) {
-            dispatchOpenCodeUpdateAvailable({ version })
-          }
-        }
         handleEvent(directory, payload, childStores, routingIndex)
       },
       onReconnect: () => {
@@ -1847,7 +1835,7 @@ export function SyncProvider(props: {
     ) => {
       if (parentSessionIds.length === 0) return
       try {
-        const scopedClient = opencodeClient.getScopedSdkClient(directory)
+        const scopedClient = codexRuntimeClient.getScopedSdkClient(directory)
         const result = await scopedClient.session.list({ directory, limit: 200 })
         const allSessions = ((result as { data?: unknown }).data ?? []) as Session[]
         const state = store.getState()
@@ -1938,7 +1926,7 @@ export function SyncProvider(props: {
               triggerDirectoryResync(directory)
             }
 
-            // Discover child sessions created by other OpenCode instances
+            // Discover child sessions created by other Codex instances
             // that didn't broadcast a session.created event on this stream.
             const lastChildDiscoveryAt = lastChildDiscoveryAtByDirectoryRef.current.get(directory) ?? 0
             if (now - lastChildDiscoveryAt >= CHILD_SESSION_DISCOVERY_INTERVAL_MS) {
@@ -2006,7 +1994,7 @@ export function SyncProvider(props: {
     setActionRefs(
       props.sdk,
       childStores,
-      () => opencodeClient.getDirectory() || props.directory,
+      () => codexRuntimeClient.getDirectory() || props.directory,
     )
   }, [props.sdk, props.directory, childStores, routingIndex])
 

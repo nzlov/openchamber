@@ -7,7 +7,7 @@ import { useProjectsStore } from '@/stores/useProjectsStore';
 import { cn } from '@/lib/utils';
 import { SettingsProjectSelector } from '@/components/sections/shared/SettingsProjectSelector';
 import { Icon } from "@/components/icon/Icon";
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
@@ -26,7 +26,7 @@ interface ProviderSources {
 }
 
 const getCurrentDirectory = (): string | null => {
-  const dir = opencodeClient.getDirectory();
+  const dir = codexRuntimeClient.getDirectory();
   if (typeof dir === 'string' && dir.trim().length > 0) {
     return dir.trim();
   }

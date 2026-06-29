@@ -56,17 +56,17 @@
           }
         },
         {
-          "label": "OpenCode Server",
-          "link": "/opencode-server/",
+          "label": "Codex Runtime",
+          "link": "/codex-server/",
           "translations": {
-            "uk": "Сервер OpenCode",
-            "zh-CN": "OpenCode 服务器",
-            "es": "Servidor OpenCode",
-            "pt-BR": "Servidor OpenCode",
-            "ko": "OpenCode 서버",
-            "pl": "Serwer OpenCode",
-            "fr": "Serveur OpenCode",
-            "ja": "OpenCode サーバー"
+            "uk": "Codex Runtime",
+            "zh-CN": "Codex 运行时",
+            "es": "Runtime de Codex",
+            "pt-BR": "Runtime do Codex",
+            "ko": "Codex 런타임",
+            "pl": "Runtime Codex",
+            "fr": "Runtime Codex",
+            "ja": "Codex ランタイム"
           }
         },
         {
@@ -257,16 +257,16 @@
       ]
     },
     {
-      "label": "OpenCode setup",
+      "label": "Codex setup",
       "translations": {
-        "uk": "Налаштування OpenCode",
-        "zh-CN": "OpenCode 设置",
-        "es": "Configuración de OpenCode",
-        "pt-BR": "Configuração do OpenCode",
-        "ko": "OpenCode 설정",
-        "pl": "Konfiguracja OpenCode",
-        "fr": "Configuration OpenCode",
-        "ja": "OpenCode 設定"
+        "uk": "Налаштування Codex",
+        "zh-CN": "Codex 设置",
+        "es": "Configuración de Codex",
+        "pt-BR": "Configuração do Codex",
+        "ko": "Codex 설정",
+        "pl": "Konfiguracja Codex",
+        "fr": "Configuration Codex",
+        "ja": "Codex 設定"
       },
       "items": [
         {
@@ -610,17 +610,17 @@
           }
         },
         {
-          "label": "OpenCode Connection",
-          "link": "/troubleshooting/opencode-connection/",
+          "label": "Codex Connection",
+          "link": "/troubleshooting/codex-connection/",
           "translations": {
-            "uk": "Підключення до OpenCode",
-            "zh-CN": "OpenCode 连接",
-            "es": "Conexión con OpenCode",
-            "pt-BR": "Conexão com o OpenCode",
-            "ko": "OpenCode 연결",
-            "pl": "Połączenie z OpenCode",
-            "fr": "Connexion à OpenCode",
-            "ja": "OpenCode 接続"
+            "uk": "Підключення до Codex",
+            "zh-CN": "Codex 连接",
+            "es": "Conexión con Codex",
+            "pt-BR": "Conexão com o Codex",
+            "ko": "Codex 연결",
+            "pl": "Połączenie z Codex",
+            "fr": "Connexion à Codex",
+            "ja": "Codex 接続"
           }
         },
         {

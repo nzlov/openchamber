@@ -2,13 +2,13 @@
   "metadata": {
     "id": "vercel-dark",
     "name": "Vercel",
-    "description": "Ported from OpenCode Vercel theme (dark variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex Vercel theme (dark variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "dark",
     "tags": [
       "dark",
-      "opencode",
+      "codex",
       "ported",
       "vercel"
     ]

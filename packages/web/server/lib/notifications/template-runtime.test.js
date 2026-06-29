@@ -7,8 +7,6 @@ const originalFetch = globalThis.fetch;
 const createRuntime = (settings = {}) => createNotificationTemplateRuntime({
   readSettingsFromDisk: async () => settings,
   persistSettings: vi.fn(async () => {}),
-  buildOpenCodeUrl: (path) => path,
-  getOpenCodeAuthHeaders: () => ({}),
   resolveGitBinaryForSpawn: () => 'git',
 });
 
@@ -67,18 +65,11 @@ describe('notification template message extraction', () => {
     })).toBe('typed final answer');
   });
 
-  it('excludes reasoning parts when fetching assistant messages', async () => {
+  it('does not fetch assistant messages from the retired upstream runtime', async () => {
     const runtime = createRuntime();
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify([
-      {
-        info: { id: 'msg-1', role: 'assistant', finish: 'stop' },
-        parts: [
-          { type: 'reasoning', text: 'private chain of thought' },
-          { type: 'text', text: 'final answer' },
-        ],
-      },
-    ])));
+    globalThis.fetch = vi.fn();
 
-    await expect(runtime.fetchLastAssistantMessageText('session-1', 'msg-1')).resolves.toBe('final answer');
+    await expect(runtime.fetchLastAssistantMessageText('session-1', 'msg-1')).resolves.toBe('');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,8 @@
   "workspaces": {
     ".": {
       "entry": [
+        "fix-deprecation.js",
+        "postcss.config.js",
         "scripts/**/*.{js,cjs,mjs,ts}"
       ],
       "project": [
@@ -12,6 +14,10 @@
     },
     "packages/ui": {
       "entry": [
+        "src/main.tsx",
+        "src/apps/renderMobileApp.tsx",
+        "src/apps/renderElectronMiniChatApp.tsx",
+        "src/apps/renderVSCodeApp.tsx",
         "src/**/*.{test,spec}.{js,cjs,mjs,jsx,ts,tsx}",
         "src/**/__tests__/**/*.{js,cjs,mjs,jsx,ts,tsx}"
       ],
@@ -21,6 +27,10 @@
     },
     "packages/web": {
       "entry": [
+        "bin/cli.js",
+        "bin/cli-entry.js",
+        "bin/**/*.test.js",
+        "src/main.tsx",
         "src/mobile-main.tsx",
         "src/mini-chat-main.tsx",
         "src/sw.ts",
@@ -39,7 +49,7 @@
         "preload.mjs",
         "tray.mjs",
         "ssh-manager.mjs",
-        "opencode-cwd.mjs",
+        "codex-cwd.mjs",
         "*.{test,spec}.{js,cjs,mjs}",
         "scripts/**/*.{js,cjs,mjs}"
       ],
@@ -50,6 +60,8 @@
     },
     "packages/vscode": {
       "entry": [
+        "src/extension.ts",
+        "webview/main.tsx",
         "src/**/*.{test,spec}.{js,cjs,mjs,ts,tsx}",
         "webview/**/*.{test,spec}.{js,cjs,mjs,ts,tsx}"
       ],

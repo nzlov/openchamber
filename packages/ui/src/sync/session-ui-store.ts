@@ -13,10 +13,10 @@
  */
 
 import { create } from "zustand"
-import type { Session, Part, Message, TextPart } from "@opencode-ai/sdk/v2/client"
+import type { Session, Part, Message, TextPart } from "@/lib/codex/types"
 import type { AttachedFile, SessionContextUsage, SessionWorktreeAttachment } from "@/stores/types/sessionTypes"
 import type { WorktreeMetadata } from "@/types/worktree"
-import { opencodeClient } from "@/lib/opencode/client"
+import { codexRuntimeClient } from "@/lib/codex/runtime-client"
 import { runtimeFetch } from "@/lib/runtime-fetch"
 import { useConfigStore } from "@/stores/useConfigStore"
 import { useProjectsStore } from "@/stores/useProjectsStore"
@@ -87,7 +87,7 @@ export function routeMessage(params: {
 }): Promise<void> {
   const requestDirectory = params.directory ?? undefined
   if (params.inputMode === "shell") {
-    return opencodeClient.shellSession({
+    return codexRuntimeClient.shellSession({
       sessionId: params.sessionId,
       directory: requestDirectory,
       agent: params.agent ?? "",
@@ -105,14 +105,15 @@ export function routeMessage(params: {
     const syncCommands = dirState?.command ?? []
     const storeCommands = useCommandsStore.getState().commands
 
-    // OpenCode registers every skill as a command (source: "skill"), but the
+    // Codex registers every skill as a command (source: "skill"), but the
     // commands store filters skills out and the synced command list is only
     // hydrated at bootstrap. Consult the live skills store so a skill selected
-    // from the slash menu is invoked via session.command (injecting its
-    // content) instead of being sent as a literal "/name" message (#1605).
+    // from the slash menu is sent as a Codex skill input instead of being sent
+    // as a literal "/name" text message (#1605).
+    const skill = useSkillsStore.getState().skills.find((s) => s.name === cmdName)
     const isCommand = syncCommands.find((c) => c.name === cmdName)
       || storeCommands.find((c) => c.name === cmdName)
-      || useSkillsStore.getState().skills.some((s) => s.name === cmdName)
+      || skill
 
     if (isCommand) {
       return optimisticSend({
@@ -123,12 +124,13 @@ export function routeMessage(params: {
         agent: params.agent,
         directory: requestDirectory,
         files: params.files,
-        send: (messageID) => opencodeClient.sendCommand({
+        send: (messageID) => codexRuntimeClient.sendCommand({
           id: params.sessionId,
           providerID: params.providerID,
           modelID: params.modelID,
           command: cmdName,
           arguments: tail.join(" "),
+          skillPath: skill?.path,
           agent: params.agent,
           variant: params.variant,
           files: params.files,
@@ -148,7 +150,7 @@ export function routeMessage(params: {
     agent: params.agent,
     directory: requestDirectory,
     files: params.files,
-    send: (messageID) => opencodeClient.sendMessage({
+    send: (messageID) => codexRuntimeClient.sendMessage({
       id: params.sessionId,
       providerID: params.providerID,
       modelID: params.modelID,
@@ -579,7 +581,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       id,
       (sid) => get().worktreeMetadata.get(sid),
     )
-    const fallbackDir = opencodeClient.getDirectory() ?? directoryState.currentDirectory ?? null
+    const fallbackDir = codexRuntimeClient.getDirectory() ?? directoryState.currentDirectory ?? null
     const resolvedDir = (directoryHint ? normalizePath(directoryHint) : null) ?? sessionDir ?? fallbackDir
     const projectsState = useProjectsStore.getState()
     const sessionProject = resolvedDir
@@ -609,9 +611,9 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       if (sessionProject && projectsState.activeProjectId !== sessionProject.id) {
         projectsState.setActiveProjectIdOnly(sessionProject.id)
       }
-      opencodeClient.setDirectory(resolvedDir ?? undefined)
+      codexRuntimeClient.setDirectory(resolvedDir ?? undefined)
     } catch (e) {
-      console.warn("Failed to set OpenCode directory for session switch:", e)
+      console.warn("Failed to set Codex directory for session switch:", e)
     }
 
     // Defer viewport anchor save for previous session — not needed for the
@@ -675,7 +677,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       pendingChangesBarDismissed: new Map(),
     })
     if (restoredSessionId) {
-      setActiveSession(restoredDirectory ?? opencodeClient.getDirectory() ?? "", restoredSessionId)
+      setActiveSession(restoredDirectory ?? codexRuntimeClient.getDirectory() ?? "", restoredSessionId)
     } else {
       setActiveSession("", "")
     }
@@ -764,8 +766,8 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
 
     // Config (providers/agents/default model+agent) lives at the PROJECT level. When the user
     // came from a worktree session, `directory` is the worktree path, whose provider list does
-    // not include project/global-scoped providers (e.g. the default agent's non-opencode model)
-    // — resolving defaults against it would wrongly fall back to opencode/big-pickle. Activate
+    // not include project/global-scoped providers (e.g. the default agent's non-codex model)
+    // — resolving defaults against it would wrongly fall back to codex/big-pickle. Activate
     // the project's config instead so the default cascade matches app startup, then re-apply it
     // (a fresh draft must start from defaults, not inherit the previous session's selection).
     const configDirectory = normalizePath(selectedProject?.path ?? null) ?? directory
@@ -1145,7 +1147,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     get().closeNewSessionDraft()
 
     try {
-      const dir = directoryOverride ?? opencodeClient.getDirectory()
+      const dir = directoryOverride ?? codexRuntimeClient.getDirectory()
       const session = await createSessionAction(title, dir, parentID ?? null, metadata)
       if (!session) return null
 
@@ -1356,7 +1358,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
 
     if (!pID || !mID) return
 
-    const sourceDirectory = normalizePath(directory ?? opencodeClient.getDirectory() ?? null)
+    const sourceDirectory = normalizePath(directory ?? codexRuntimeClient.getDirectory() ?? null)
     let sessionDirectory = sourceDirectory
     let createdWorktree: WorktreeMetadata | null = null
     let createdWorktreeProject: { id: string; path: string } | null = null

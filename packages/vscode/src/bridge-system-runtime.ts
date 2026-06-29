@@ -3,8 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
-import { removeProviderConfig, getProviderSources } from './opencodeConfig';
-import { getProviderAuth, removeProviderAuth } from './opencodeAuth';
+import { removeProviderConfig, getProviderSources } from './codexConfig';
+import { getProviderAuth, removeProviderAuth } from './codexAuth';
 import { fetchQuotaForProvider, listConfiguredQuotaProviders } from './quotaProviders';
 import { getSessionActivitySnapshot } from './sessionActivityWatcher';
 import type { BridgeContext, BridgeResponse } from './bridge';
@@ -216,21 +216,6 @@ export async function handleSystemBridgeMessage(
   const { id, type, payload } = message;
 
   switch (type) {
-    case 'api:opencode/directory': {
-      const target = (payload as { path?: string })?.path;
-      if (!target) {
-        return { id, type, success: false, error: 'Path is required' };
-      }
-      const baseDirectory =
-        ctx?.manager?.getWorkingDirectory() || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || os.homedir();
-      const resolvedPath = deps.resolveUserPath(target, baseDirectory);
-      const result = await ctx?.manager?.setWorkingDirectory(resolvedPath);
-      if (!result) {
-        return { id, type, success: false, error: 'OpenCode manager unavailable' };
-      }
-      return { id, type, success: true, data: result };
-    }
-
     case 'api:models/metadata': {
       try {
         const data = await deps.fetchModelsMetadata();
@@ -238,32 +223,6 @@ export async function handleSystemBridgeMessage(
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         return { id, type, success: false, error: errorMessage };
-      }
-    }
-
-    case 'api:opencode/version': {
-      try {
-        const apiUrl = ctx?.manager?.getApiUrl();
-        if (!apiUrl) {
-          return { id, type, success: true, data: { version: null, error: 'OpenCode manager unavailable' } };
-        }
-        const base = `${apiUrl.replace(/\/+$/, '')}/`;
-        const response = await fetch(new URL('global/health', base).toString(), {
-          method: 'GET',
-          headers: { Accept: 'application/json', ...ctx?.manager?.getOpenCodeAuthHeaders() },
-        });
-        const health = await response.json().catch(() => null) as { version?: unknown; error?: unknown } | null;
-        if (!response.ok) {
-          const message = typeof health?.error === 'string' ? health.error : response.statusText || 'Failed to read OpenCode version';
-          return { id, type, success: true, data: { version: null, error: message } };
-        }
-        const version = typeof health?.version === 'string' && health.version.trim().length > 0
-          ? health.version.trim().replace(/^v/, '')
-          : null;
-        return { id, type, success: true, data: { version } };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return { id, type, success: true, data: { version: null, error: errorMessage } };
       }
     }
 

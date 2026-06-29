@@ -37,9 +37,10 @@ import { useModelLists } from '@/hooks/useModelLists';
 import { useIsTextTruncated } from '@/hooks/useIsTextTruncated';
 import { formatEffortLabel, getCycledPrimaryAgentName, isPrimaryMode, type MobileControlsPanel } from './mobileControlsUtils';
 import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
-import { useOpenCodeReadiness } from '@/hooks/useOpenCodeReadiness';
+import { useCodexReadiness } from '@/hooks/useCodexReadiness';
 import { eventMatchesShortcut, getEffectiveShortcutCombo, normalizeCombo } from '@/lib/shortcuts';
 import { markStartupTrace } from '@/lib/startupTrace';
+import { SUPPORTS_AGENT_SELECTION } from '@/lib/codex/capabilities';
 
 type IconComponent = IconName;
 
@@ -291,7 +292,8 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
     onMobilePanelChange,
 }) => {
     const { t } = useI18n();
-    const { isReady, isUnavailable } = useOpenCodeReadiness();
+    const { isReady, isUnavailable } = useCodexReadiness();
+    const supportsAgentSelection = SUPPORTS_AGENT_SELECTION;
     const readinessLabel = isUnavailable ? t('common.unavailable') : t('common.loading');
     const providers = useConfigStore((state) => state.providers);
     const currentProviderId = useConfigStore((state) => state.currentProviderId);
@@ -666,7 +668,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
             const agent = typeof message.agent === 'string' && message.agent.trim().length > 0
                 ? message.agent
                 : (typeof message.mode === 'string' && message.mode.trim().length > 0 ? message.mode : undefined);
-            // OpenCode 1.4.0 moved variant from top-level to model.variant.
+            // Codex 1.4.0 moved variant from top-level to model.variant.
             // Prefer the new location, fall back to the legacy one for older servers.
             const variantCandidate = message.model?.variant ?? message.variant;
             const variant = typeof variantCandidate === 'string' && variantCandidate.trim().length > 0
@@ -2200,7 +2202,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
         };
 
         const handleModelPickerKeyDown = (e: React.KeyboardEvent, selectedItem: ModelPickerEntry | undefined) => {
-            const cycleAgentDirection = getCycleAgentDirectionFromEvent(e);
+            const cycleAgentDirection = supportsAgentSelection ? getCycleAgentDirectionFromEvent(e) : null;
             if (cycleAgentDirection) {
                 e.preventDefault();
                 handleCycleAgentFromModelPicker(cycleAgentDirection);
@@ -2222,7 +2224,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
         };
 
         const handleModelShortcutKeyDownCapture = (e: React.KeyboardEvent) => {
-            const cycleAgentDirection = getCycleAgentDirectionFromEvent(e);
+            const cycleAgentDirection = supportsAgentSelection ? getCycleAgentDirectionFromEvent(e) : null;
             if (!cycleAgentDirection) {
                 return;
             }
@@ -2381,7 +2383,9 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                     return (
                                         <div className="flex items-center gap-x-2 whitespace-nowrap overflow-hidden">
                                             <span>{t('chat.modelControls.keyboardHintNavigate')}</span>
-                                            <span>{t('chat.modelControls.keyboardHintSwitchAgent', { shortcut: 'Tab' })}</span>
+                                            {supportsAgentSelection ? (
+                                                <span>{t('chat.modelControls.keyboardHintSwitchAgent', { shortcut: 'Tab' })}</span>
+                                            ) : null}
                                             {activeHasThinkingVariants ? <span>{t('chat.modelControls.keyboardHintThinking')}</span> : null}
                                         </div>
                                     );
@@ -2664,6 +2668,10 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
     };
 
     const renderAgentSelector = () => {
+        if (!supportsAgentSelection) {
+            return null;
+        }
+
         if (!isCompact) {
             return (
                 <div className="flex items-center gap-2 min-w-0">
@@ -2874,9 +2882,9 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
 
             {renderMobileModelPanel()}
             {renderMobileVariantPanel()}
-            {renderMobileAgentPanel()}
+            {supportsAgentSelection ? renderMobileAgentPanel() : null}
             {renderMobileModelTooltip()}
-            {renderMobileAgentTooltip()}
+            {supportsAgentSelection ? renderMobileAgentTooltip() : null}
         </>
     );
 

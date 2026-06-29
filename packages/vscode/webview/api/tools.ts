@@ -1,9 +1,9 @@
 import type { ToolsAPI } from '@openchamber/ui/lib/api/types';
-import { opencodeClient } from '@openchamber/ui/lib/opencode/client';
+import { codexRuntimeClient } from '@openchamber/ui/lib/codex/runtime-client';
 
 export const createVSCodeToolsAPI = (): ToolsAPI => ({
   async getAvailableTools(): Promise<string[]> {
-    const data = await opencodeClient.listToolIds();
+    const data = await codexRuntimeClient.listToolIds();
     if (!Array.isArray(data)) {
       throw new Error('Tools API returned invalid data format');
     }

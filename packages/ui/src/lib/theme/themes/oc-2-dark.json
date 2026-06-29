@@ -2,13 +2,13 @@
   "metadata": {
     "id": "oc-2-dark",
     "name": "OC-2",
-    "description": "Ported from OpenCode OC-2 theme (dark variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex OC-2 theme (dark variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "dark",
     "tags": [
       "dark",
-      "opencode",
+      "codex",
       "ported",
       "oc-2"
     ]

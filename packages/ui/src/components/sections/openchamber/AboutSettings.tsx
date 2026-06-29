@@ -25,7 +25,6 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
   const [updateDialogOpen, setUpdateDialogOpen] = React.useState(initialUpdateDialogOpen);
   const [showChecking, setShowChecking] = React.useState(false);
   const [openChamberVersion, setOpenChamberVersion] = React.useState<string | null>(null);
-  const [openCodeVersion, setOpenCodeVersion] = React.useState<string | null>(null);
   const updateStore = useUpdateStore(useShallow((s) => ({
     info: s.info,
     checking: s.checking,
@@ -70,33 +69,6 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
     };
   }, []);
 
-  React.useEffect(() => {
-    let cancelled = false;
-
-    const loadOpenCodeVersion = async () => {
-      try {
-        const response = await runtimeFetch('/api/opencode/upgrade-status', {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) return;
-        const data = await response.json().catch(() => null) as { currentVersion?: unknown } | null;
-        const version = typeof data?.currentVersion === 'string' && data.currentVersion.trim().length > 0
-          ? data.currentVersion.trim()
-          : null;
-        if (!cancelled) setOpenCodeVersion(version);
-      } catch {
-        if (!cancelled) setOpenCodeVersion(null);
-      }
-    };
-
-    void loadOpenCodeVersion();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Track if we initiated a check to show toast on completion
   const didInitiateCheck = React.useRef(false);
 
@@ -128,7 +100,6 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
           <h2 className="mt-4 typography-ui-header font-semibold text-foreground">OpenChamber</h2>
           <div className="mt-2 space-y-1 typography-ui text-muted-foreground">
             <p>{t('aboutDialog.openChamberVersionLabel', { version: currentVersion })}</p>
-            <p>{t('aboutDialog.openCodeVersionLabel', { version: openCodeVersion || t('settings.openchamber.about.state.unknown') })}</p>
           </div>
         </div>
 
@@ -236,11 +207,6 @@ export const AboutSettings: React.FC<AboutSettingsProps> = ({ initialUpdateDialo
             <span className="typography-ui-label text-foreground">{t('settings.openchamber.about.field.version')}</span>
             <span className="typography-meta text-muted-foreground font-mono">{currentVersion}</span>
           </div>
-          <div className="flex min-w-0 flex-col">
-            <span className="typography-ui-label text-foreground">{t('settings.openchamber.about.field.openCodeVersion')}</span>
-            <span className="typography-meta text-muted-foreground font-mono">{openCodeVersion || t('settings.openchamber.about.state.unknown')}</span>
-          </div>
-          
           <div className="flex items-center gap-3">
             {updateStore.checking && (
               <div className="flex items-center gap-2 text-muted-foreground">

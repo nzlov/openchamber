@@ -15,6 +15,7 @@ export function parseRoute(searchParams?: URLSearchParams): RouteState {
 
   return {
     sessionId: parseSessionId(params),
+    directory: parseDirectory(params),
     tab: parseTab(params),
     settingsPath: parseSettingsPath(params),
     diffFile: parseDiffFile(params),
@@ -42,6 +43,18 @@ function getSearchParams(): URLSearchParams {
  */
 function parseSessionId(params: URLSearchParams): string | null {
   const value = params.get(ROUTE_PARAMS.SESSION);
+  if (!value || value.trim().length === 0) {
+    return null;
+  }
+  return value.trim();
+}
+
+/**
+ * Parse optional directory hint from URL parameters.
+ * Returns null if missing or empty.
+ */
+function parseDirectory(params: URLSearchParams): string | null {
+  const value = params.get(ROUTE_PARAMS.DIRECTORY);
   if (!value || value.trim().length === 0) {
     return null;
   }

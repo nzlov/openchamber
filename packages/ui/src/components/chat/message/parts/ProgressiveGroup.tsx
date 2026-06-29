@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import type { TurnActivityRecord as TurnActivityPart } from '../../lib/turns/types';
-import type { ToolPart as ToolPartType } from '@opencode-ai/sdk/v2';
+import type { ToolPart as ToolPartType } from '@/lib/codex/types';
 import type { StreamPhase } from '../types';
 import type { ContentChangeReason } from '@/hooks/useChatAutoFollow';
 import type { ToolPopupContent } from '../types';

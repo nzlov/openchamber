@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { BUILT_IN_SKILL_LOCATION, type DiscoveredSkill, type SkillScope, type SkillSource } from './opencodeConfig';
+import { BUILT_IN_SKILL_LOCATION, type DiscoveredSkill, type SkillScope, type SkillSource } from './codexConfig';
 import type { BridgeContext } from './bridge';
 
 const SETTINGS_KEY = 'openchamber.settings';
@@ -58,12 +58,12 @@ const inferSkillScopeAndSourceFromLocation = (location: string, workingDirectory
     ? 'agents'
     : resolvedPath.includes(`${path.sep}.claude${path.sep}skills${path.sep}`)
       ? 'claude'
-      : 'opencode';
+      : 'codex';
 
   const projectAncestors = getProjectAncestors(workingDirectory);
   const isProjectScoped = projectAncestors.some((ancestor) => {
     const candidates = [
-      path.join(ancestor, '.opencode'),
+      path.join(ancestor, '.codex'),
       path.join(ancestor, '.claude', 'skills'),
       path.join(ancestor, '.agents', 'skills'),
     ];
@@ -75,12 +75,11 @@ const inferSkillScopeAndSourceFromLocation = (location: string, workingDirectory
   }
 
   const home = os.homedir();
+  const codexHome = process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : path.join(home, '.codex');
   const userRoots = [
-    path.join(home, '.config', 'opencode'),
-    path.join(home, '.opencode'),
+    codexHome,
     path.join(home, '.claude', 'skills'),
     path.join(home, '.agents', 'skills'),
-    process.env.OPENCODE_CONFIG_DIR ? path.resolve(process.env.OPENCODE_CONFIG_DIR) : null,
   ].filter((value): value is string => Boolean(value));
 
   if (userRoots.some((root) => isPathInside(resolvedPath, root))) {
@@ -90,11 +89,11 @@ const inferSkillScopeAndSourceFromLocation = (location: string, workingDirectory
   return { scope: 'user', source };
 };
 
-export const fetchOpenCodeSkillsFromApi = async (
+export const fetchRuntimeSkillsFromApi = async (
   ctx: BridgeContext | undefined,
   workingDirectory?: string,
 ): Promise<DiscoveredSkill[] | null> => {
-  const apiUrl = ctx?.manager?.getApiUrl();
+  const apiUrl = ctx?.manager?.getRuntimeApiUrl();
   if (!apiUrl) {
     return null;
   }
@@ -110,7 +109,7 @@ export const fetchOpenCodeSkillsFromApi = async (
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        ...(ctx?.manager?.getOpenCodeAuthHeaders() || {}),
+        ...(ctx?.manager?.getRuntimeAuthHeaders() || {}),
       },
       signal: AbortSignal.timeout(8_000),
     });
@@ -138,7 +137,7 @@ export const fetchOpenCodeSkillsFromApi = async (
             name,
             path: location,
             scope: 'user',
-            source: 'opencode',
+            source: 'codex',
             description,
             content,
           } as DiscoveredSkill;
@@ -268,8 +267,6 @@ const readPersistedSettings = (ctx?: BridgeContext): Record<string, unknown> => 
 
 export const readSettings = (ctx?: BridgeContext): Record<string, unknown> => {
   const persisted = readPersistedSettings(ctx);
-  const persistedOpencodeBinary =
-    typeof persisted.opencodeBinary === 'string' ? String(persisted.opencodeBinary).trim() : '';
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
   const themeVariant =
     vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Light ||
@@ -281,7 +278,6 @@ export const readSettings = (ctx?: BridgeContext): Record<string, unknown> => {
     ...persisted,
     themeVariant,
     lastDirectory: workspaceFolder,
-    opencodeBinary: persistedOpencodeBinary || undefined,
   };
 };
 
@@ -291,7 +287,7 @@ export const persistSettings = async (changes: Record<string, unknown>, ctx?: Br
 
   const keysToClear = new Set<string>();
 
-  for (const key of ['defaultModel', 'defaultVariant', 'defaultAgent', 'defaultGitIdentityId', 'opencodeBinary']) {
+  for (const key of ['defaultModel', 'defaultVariant', 'defaultAgent', 'defaultGitIdentityId']) {
     const value = restChanges[key];
     if (typeof value === 'string' && value.trim().length === 0) {
       keysToClear.add(key);
@@ -313,10 +309,6 @@ export const persistSettings = async (changes: Record<string, unknown>, ctx?: Br
     delete restChanges.usageRefreshIntervalMs;
   }
 
-  if (typeof restChanges.opencodeBinary === 'string') {
-    restChanges.opencodeBinary = restChanges.opencodeBinary.trim();
-  }
-
   // Persistable state = current persisted (no derived fields) + sanitized changes.
   const persistedCurrent = readPersistedSettings(ctx);
   const persistable: Record<string, unknown> = { ...persistedCurrent, ...restChanges };
@@ -335,10 +327,6 @@ export const persistSettings = async (changes: Record<string, unknown>, ctx?: Br
     ...persistable,
     themeVariant: current.themeVariant,
     lastDirectory: current.lastDirectory,
-    opencodeBinary:
-      typeof persistable.opencodeBinary === 'string' && persistable.opencodeBinary.length > 0
-        ? persistable.opencodeBinary
-        : undefined,
   };
 };
 

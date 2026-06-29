@@ -1,6 +1,6 @@
 import React from 'react';
-import type { Session } from '@opencode-ai/sdk/v2';
-import { opencodeClient } from '@/lib/opencode/client';
+import type { Session } from '@/lib/codex/types';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { ensureGlobalSessionsLoaded, useGlobalSessionsStore, resolveGlobalSessionDirectory } from '@/stores/useGlobalSessionsStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { getAllSyncSessions } from '@/sync/sync-refs';
@@ -154,9 +154,9 @@ export const useSessionAutoCleanup = (enabledOrOptions?: boolean | CleanupOption
 
           try {
             if (sessionRetentionAction === 'archive') {
-              await opencodeClient.updateSession(id, { time: { archived: Date.now() } }, directory);
+              await codexRuntimeClient.updateSession(id, { time: { archived: Date.now() } }, directory);
             } else {
-              await opencodeClient.deleteSession(id, directory);
+              await codexRuntimeClient.deleteSession(id, directory);
             }
             completedIds.push(id);
           } catch {

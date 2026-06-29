@@ -2,7 +2,7 @@
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { checkIsGitRepository } from '@/lib/gitApi';
 import { streamDebugEnabled } from '@/stores/utils/streamDebug';
 import { copyTextToClipboard as copyPlainTextToClipboard } from '@/lib/clipboard';
@@ -186,7 +186,7 @@ export const debugUtils = {
     const sessionState = useSessionUIStore.getState();
     const projectsState = useProjectsStore.getState();
     const currentDirectory = directoryState.currentDirectory || null;
-    const opencodeDirectory = opencodeClient.getDirectory() ?? null;
+    const codexDirectory = codexRuntimeClient.getDirectory() ?? null;
 
     const sessions = getSyncSessions();
     const sessionDirectories = new Set<string>();
@@ -251,10 +251,10 @@ export const debugUtils = {
     let pathInfo: unknown = null;
     let projectInfo: unknown = null;
     let settingsInfo: unknown = null;
-    let opencodeHealth: unknown = null;
+    let codexHealth: unknown = null;
 
     try {
-      const pathResult = await opencodeClient.getSdkClient().path.get(
+      const pathResult = await codexRuntimeClient.getSdkClient().path.get(
         currentDirectory ? { directory: currentDirectory } : undefined
       );
       pathInfo = pathResult.error ? { error: pathResult.error } : pathResult.data;
@@ -263,7 +263,7 @@ export const debugUtils = {
     }
 
     try {
-      const projectResult = await opencodeClient.getSdkClient().project.current(
+      const projectResult = await codexRuntimeClient.getSdkClient().project.current(
         currentDirectory ? { directory: currentDirectory } : undefined
       );
       projectInfo = projectResult.error ? { error: projectResult.error } : projectResult.data;
@@ -289,21 +289,18 @@ export const debugUtils = {
           parsed = null;
         }
       }
-      opencodeHealth = {
+      codexHealth = {
         status: resp.status,
         ok: resp.ok,
         contentType,
         type: isJson ? 'json' : 'html',
-        openCodePort: parsed?.openCodePort ?? null,
-        openCodeRunning: parsed?.openCodeRunning ?? null,
-        openCodeSecureConnection: parsed?.openCodeSecureConnection ?? null,
-        openCodeAuthSource: parsed?.openCodeAuthSource ?? null,
-        isOpenCodeReady: parsed?.isOpenCodeReady ?? null,
-        lastOpenCodeError: parsed?.lastOpenCodeError ?? null,
+        codexRunning: parsed?.codexRunning ?? null,
+        codexReady: parsed?.codexReady ?? null,
+        codex: parsed?.codex ?? null,
         preview: body ? body.slice(0, 120) : null,
       };
     } catch (error) {
-      opencodeHealth = { error: error instanceof Error ? error.message : String(error) };
+      codexHealth = { error: error instanceof Error ? error.message : String(error) };
     }
 
     let gitCheck: { isGitRepo: boolean | null; error?: string } = { isGitRepo: null };
@@ -340,9 +337,9 @@ export const debugUtils = {
         : null,
       directories: {
         currentDirectory,
-        opencodeDirectory: (pathInfo as { directory?: string; worktree?: string } | null)?.directory
+        codexDirectory: (pathInfo as { directory?: string; worktree?: string } | null)?.directory
           || (pathInfo as { worktree?: string } | null)?.worktree
-          || opencodeDirectory,
+          || codexDirectory,
         homeDirectory: directoryState.homeDirectory || null,
         isHomeReady: directoryState.isHomeReady,
         hasPersistedDirectory: directoryState.hasPersistedDirectory,
@@ -367,10 +364,10 @@ export const debugUtils = {
       },
       git: gitCheck,
       localStorage: localStorageSnapshot,
-      opencode: {
+      codex: {
         pathInfo,
         projectInfo,
-        health: opencodeHealth,
+        health: codexHealth,
       },
       openchamber: {
         settingsInfo,
@@ -480,9 +477,9 @@ export const debugUtils = {
    showRetryHelp() {
      console.log('[DEBUG] How to handle empty Claude responses:\n');
      console.log('1. Check the last message:');
-    console.log('   __opencodeDebug.getLastAssistantMessage()\n');
+    console.log('   __codexDebug.getLastAssistantMessage()\n');
     console.log('2. Find all empty messages in session:');
-    console.log('   __opencodeDebug.findEmptyMessages()\n');
+    console.log('   __codexDebug.findEmptyMessages()\n');
     console.log('3. To retry, you can:');
     console.log('   - Edit your last user message and resend');
     console.log('   - Send a follow-up message like "Please provide the response"');
@@ -689,20 +686,20 @@ export const debugUtils = {
 };
 
 if (typeof window !== 'undefined') {
-  (window as any).__opencodeDebug = debugUtils;
+  (window as any).__codexDebug = debugUtils;
   if (streamDebugEnabled()) {
-    console.log('[DEBUG] OpenCode Debug Utils loaded! Use window.__opencodeDebug in console');
+    console.log('[DEBUG] Codex Debug Utils loaded! Use window.__codexDebug in console');
     console.log('Available commands:');
-    console.log('  __opencodeDebug.getLastAssistantMessage() - Get last assistant message details');
-    console.log('  __opencodeDebug.getAllMessages(truncate?) - List all messages (truncate=true for short preview)');
-    console.log('  __opencodeDebug.truncateMessages(messages) - Truncate long fields in messages array');
-    console.log('  __opencodeDebug.getAppStatus() - Show app status snapshot');
-    console.log('  __opencodeDebug.checkLastMessage() - Check if last message is problematic');
-    console.log('  __opencodeDebug.findEmptyMessages() - Find all empty assistant messages');
-    console.log('  __opencodeDebug.showRetryHelp() - Show instructions for handling empty responses');
-    console.log('  __opencodeDebug.getStreamingState() - Get streaming state info');
-    console.log('  __opencodeDebug.analyzeMessageCompletionConsistency(opts?) - Compare time.completed vs part timings');
-    console.log('  __opencodeDebug.checkCompletionStatus() - Check completion status of last message');
+    console.log('  __codexDebug.getLastAssistantMessage() - Get last assistant message details');
+    console.log('  __codexDebug.getAllMessages(truncate?) - List all messages (truncate=true for short preview)');
+    console.log('  __codexDebug.truncateMessages(messages) - Truncate long fields in messages array');
+    console.log('  __codexDebug.getAppStatus() - Show app status snapshot');
+    console.log('  __codexDebug.checkLastMessage() - Check if last message is problematic');
+    console.log('  __codexDebug.findEmptyMessages() - Find all empty assistant messages');
+    console.log('  __codexDebug.showRetryHelp() - Show instructions for handling empty responses');
+    console.log('  __codexDebug.getStreamingState() - Get streaming state info');
+    console.log('  __codexDebug.analyzeMessageCompletionConsistency(opts?) - Compare time.completed vs part timings');
+    console.log('  __codexDebug.checkCompletionStatus() - Check completion status of last message');
   }
 
   window.addEventListener('error', (event) => {

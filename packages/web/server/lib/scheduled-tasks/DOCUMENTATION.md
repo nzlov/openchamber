@@ -6,7 +6,7 @@ Server-owned scheduled task runtime and routes for OpenChamber-only automation.
 
 - Per-project scheduled task persistence is owned by `packages/web/server/lib/projects/project-config.js`.
 - Runtime orchestration and execution is owned by this module.
-- This module is OpenChamber feature logic; it is intentionally separate from OpenCode proxy/runtime internals.
+- This module is OpenChamber feature logic; it is intentionally separate from agent proxy/runtime internals.
 
 ## Files
 
@@ -14,7 +14,7 @@ Server-owned scheduled task runtime and routes for OpenChamber-only automation.
   - Next-run computation (daily/weekly/cron compatibility)
   - Timer scheduling and queueing
   - Concurrency controls
-  - Session create + prompt_async execution
+  - Codex thread creation + turn execution
   - Emits OpenChamber task-run events
 
 - `packages/web/server/lib/scheduled-tasks/routes.js`

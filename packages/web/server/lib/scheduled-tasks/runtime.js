@@ -1,7 +1,6 @@
-import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { DateTime } from 'luxon';
 import parser from 'cron-parser';
-import { expandSnippets } from '../opencode/snippets.js';
+import { expandSnippets } from '../openchamber-runtime/snippets.js';
 
 const DEFAULT_GLOBAL_CONCURRENCY = 4;
 const DEFAULT_PROJECT_CONCURRENCY = 2;
@@ -68,29 +67,6 @@ const safeErrorMessage = (error, maxLength = 2_000) => {
     return 'Unknown error';
   }
   return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
-};
-
-export const parseScheduledCommandPrompt = (prompt) => {
-  if (typeof prompt !== 'string') {
-    return null;
-  }
-
-  const trimmed = prompt.trim();
-  if (!trimmed.startsWith('/')) {
-    return null;
-  }
-
-  const firstLine = trimmed.split(/\r?\n/, 1)[0] || '';
-  const [head, ...tail] = firstLine.split(/\s+/);
-  const commandName = (head || '').slice(1).trim();
-  if (!commandName) {
-    return null;
-  }
-
-  return {
-    command: commandName,
-    arguments: tail.join(' ').trim(),
-  };
 };
 
 export const computeNextRunAt = (task, nowMs = Date.now()) => {
@@ -221,9 +197,7 @@ export const createScheduledTasksRuntime = (deps) => {
   const {
     projectConfigRuntime,
     listProjects,
-    buildOpenCodeUrl,
-    getOpenCodeAuthHeaders,
-    waitForOpenCodeReady,
+    codexProcessRuntime,
     emitTaskRunEvent,
     logger = console,
     maxGlobalConcurrency = DEFAULT_GLOBAL_CONCURRENCY,
@@ -406,71 +380,44 @@ export const createScheduledTasksRuntime = (deps) => {
     return projectRunning < maxProjectConcurrency;
   };
 
-  const buildPromptAsyncPayload = (task, projectPath) => ({
-    model: {
-      providerID: task.execution.providerID,
-      modelID: task.execution.modelID,
-    },
-    ...(task.execution.agent ? { agent: task.execution.agent } : {}),
-    ...(task.execution.variant ? { variant: task.execution.variant } : {}),
-    parts: [
-      {
-        type: 'text',
-        text: expandSnippets(task.execution.prompt, projectPath),
-      },
-    ],
-  });
-
-  const runPromptAsync = async ({ baseUrl, authHeaders, sessionID, projectPath, task }) => {
-    const promptUrl = new URL(`${baseUrl}/session/${encodeURIComponent(sessionID)}/prompt_async`);
-    promptUrl.searchParams.set('directory', projectPath);
-    const response = await fetch(promptUrl.toString(), {
-      method: 'POST',
-      headers: {
-        ...authHeaders,
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify(buildPromptAsyncPayload(task, projectPath)),
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`prompt_async failed (${response.status})${body ? `: ${body}` : ''}`);
+  const getInitializedCodexProtocolRuntime = async (cwd) => {
+    if (!codexProcessRuntime || typeof codexProcessRuntime.getProtocolRuntime !== 'function') {
+      throw new Error('Codex runtime is unavailable');
     }
+    const health = typeof codexProcessRuntime.getHealthSnapshot === 'function'
+      ? codexProcessRuntime.getHealthSnapshot()
+      : {};
+    let protocolRuntime = codexProcessRuntime.getProtocolRuntime();
+    if (!health.running || !health.initialized || !protocolRuntime) {
+      if (typeof codexProcessRuntime.startAndInitialize !== 'function') {
+        throw new Error('Codex runtime cannot be initialized');
+      }
+      await codexProcessRuntime.startAndInitialize({
+        cwd,
+        clientInfo: {
+          name: 'openchamber',
+          title: 'OpenChamber',
+          version: '0.0.0',
+        },
+        capabilities: {
+          experimentalApi: true,
+          requestAttestation: false,
+          mcpServerOpenaiFormElicitation: false,
+        },
+      });
+      protocolRuntime = codexProcessRuntime.getProtocolRuntime();
+    }
+    if (!protocolRuntime || typeof protocolRuntime.startThread !== 'function' || typeof protocolRuntime.startTurn !== 'function') {
+      throw new Error('Codex protocol runtime is unavailable');
+    }
+    return protocolRuntime;
   };
 
-  const runScheduledCommandIfApplicable = async ({ client, projectPath, sessionID, task }) => {
-    const parsed = parseScheduledCommandPrompt(task?.execution?.prompt);
-    if (!parsed) {
-      return false;
-    }
-
-    let commands = [];
-    try {
-      const response = await client.command.list({ directory: projectPath });
-      commands = Array.isArray(response?.data) ? response.data : [];
-    } catch {
-      return false;
-    }
-
-    const hasMatchingCommand = commands.some((command) => command?.name === parsed.command);
-    if (!hasMatchingCommand) {
-      return false;
-    }
-
-    await client.session.command({
-      sessionID,
-      directory: projectPath,
-      command: parsed.command,
-      arguments: parsed.arguments,
-      ...(task.execution.agent ? { agent: task.execution.agent } : {}),
-      model: `${task.execution.providerID}/${task.execution.modelID}`,
-      ...(task.execution.variant ? { variant: task.execution.variant } : {}),
-    });
-
-    return true;
-  };
+  const buildCodexTurnInput = (task, projectPath) => [{
+    type: 'text',
+    text: expandSnippets(task.execution.prompt, projectPath),
+    text_elements: [],
+  }];
 
   const runTaskWithWatchdog = async (projectID, task, reason) => {
     const startedAt = Date.now();
@@ -480,24 +427,28 @@ export const createScheduledTasksRuntime = (deps) => {
       throw new Error('project path is unavailable');
     }
 
-    if (typeof waitForOpenCodeReady === 'function') {
-      await waitForOpenCodeReady(10_000, 250);
+    const protocolRuntime = await getInitializedCodexProtocolRuntime(projectPath);
+    const threadResponse = await protocolRuntime.startThread({
+      cwd: projectPath,
+      ...(task.execution.modelID ? { model: task.execution.modelID } : {}),
+      ...(task.execution.providerID ? { modelProvider: task.execution.providerID } : {}),
+      threadSource: 'api',
+    });
+    const sessionID = threadResponse?.thread?.id || threadResponse?.threadId;
+    if (!sessionID) {
+      throw new Error('failed to create Codex thread');
     }
 
-    const baseUrl = buildOpenCodeUrl('/', '').replace(/\/$/, '');
-    const authHeaders = getOpenCodeAuthHeaders();
-    const client = createOpencodeClient({
-      baseUrl,
-      headers: authHeaders,
-    });
-
-    const sessionResponse = await client.session.create({
-      directory: projectPath,
-      title,
-    });
-    const sessionID = sessionResponse?.data?.id;
-    if (!sessionID) {
-      throw new Error('failed to create session');
+    if (typeof protocolRuntime.setThreadName === 'function') {
+      await protocolRuntime.setThreadName({
+        threadId: sessionID,
+        name: title,
+      });
+    } else if (typeof protocolRuntime.updateThread === 'function') {
+      await protocolRuntime.updateThread({
+        threadId: sessionID,
+        title,
+      });
     }
 
     try {
@@ -511,21 +462,16 @@ export const createScheduledTasksRuntime = (deps) => {
     } catch {
     }
 
-    const executedAsCommand = await runScheduledCommandIfApplicable({
-      client,
-      projectPath,
-      sessionID,
-      task,
+    await protocolRuntime.startTurn({
+      threadId: sessionID,
+      cwd: projectPath,
+      input: buildCodexTurnInput(task, projectPath),
+      ...(task.execution.modelID ? { model: task.execution.modelID } : {}),
+      responsesapiClientMetadata: {
+        openchamberScheduledTaskId: task.id,
+        openchamberScheduledTaskReason: reason,
+      },
     });
-    if (!executedAsCommand) {
-      await runPromptAsync({
-        baseUrl,
-        authHeaders,
-        sessionID,
-        projectPath,
-        task,
-      });
-    }
 
     const finishedAt = Date.now();
     return {

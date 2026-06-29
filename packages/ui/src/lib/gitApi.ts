@@ -1,6 +1,6 @@
 
 import * as gitHttp from './gitApiHttp';
-import { opencodeClient } from './opencode/client';
+import { codexRuntimeClient } from './codex/runtime-client';
 import { renderMagicPrompt } from './magicPrompts';
 import { materializeOpenDraftSession, useSessionUIStore } from '@/sync/session-ui-store';
 import { useSelectionStore } from '@/sync/selection-store';
@@ -511,8 +511,8 @@ const runStructuredGenerationInActiveSession = async ({
 
   requestChatForceScrollBottom(generationSession.sessionId);
 
-  const response = await opencodeClient.withDirectory(directory, async () => {
-    return opencodeClient.getApiClient().session.prompt({
+  const response = await codexRuntimeClient.withDirectory(directory, async () => {
+    return codexRuntimeClient.getApiClient().session.prompt({
       sessionID: generationSession.sessionId,
       ...(trimmedDirectory.length > 0 ? { directory: trimmedDirectory } : {}),
       model: {

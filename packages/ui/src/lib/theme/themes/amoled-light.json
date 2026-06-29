@@ -2,13 +2,13 @@
   "metadata": {
     "id": "amoled-light",
     "name": "AMOLED",
-    "description": "Ported from OpenCode AMOLED theme (light variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex AMOLED theme (light variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "light",
     "tags": [
       "light",
-      "opencode",
+      "codex",
       "ported",
       "amoled"
     ]

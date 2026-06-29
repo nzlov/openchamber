@@ -24,8 +24,8 @@ const searchFilesMock = mock(() => {
   return request.promise;
 });
 
-mock.module('@/lib/opencode/client', () => ({
-  opencodeClient: {
+mock.module('@/lib/codex/runtime-client', () => ({
+  codexRuntimeClient: {
     searchFiles: searchFilesMock,
   },
 }));

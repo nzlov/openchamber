@@ -364,7 +364,7 @@ export interface GitWorktreeBootstrapStatus {
 
 export interface CreateGitWorktreePayload {
   mode?: 'new' | 'existing';
-  /** Worktree folder name (falls back to OpenCode name generation when omitted). */
+  /** Worktree folder name (falls back to Codex name generation when omitted). */
   worktreeName?: string;
   /** Backward-compatible alias for worktreeName. */
   name?: string;
@@ -625,7 +625,6 @@ export interface SettingsPayload {
   darkThemeId?: string;
   lastDirectory?: string;
   homeDirectory?: string;
-  opencodeBinary?: string;
   projects?: ProjectEntry[];
   activeProjectId?: string;
   securityScopedBookmarks?: string[];
@@ -642,8 +641,6 @@ export interface SettingsPayload {
   queueModeEnabled?: boolean;
   gitmojiEnabled?: boolean;
   inputSpellcheckEnabled?: boolean;
-  showOpenCodeUpdateNotifications?: boolean;
-  openCodeUpdateToastDismissedVersion?: string;
   showToolFileIcons?: boolean;
   showTurnChangedFiles?: boolean;
   showExpandedBashTools?: boolean;
@@ -683,8 +680,6 @@ export interface SettingsLoadResult {
 export interface SettingsAPI {
   load(): Promise<SettingsLoadResult>;
   save(changes: Partial<SettingsPayload>): Promise<SettingsPayload>;
-
-  restartOpenCode?: () => Promise<{ restarted: boolean }>;
 }
 
 export interface DirectoryPermissionRequest {
@@ -1156,7 +1151,7 @@ export interface SkillsCatalogSource {
 interface SkillsCatalogItemInstalledBadge {
   isInstalled: boolean;
   scope?: 'user' | 'project';
-  source?: 'opencode' | 'agents' | 'claude';
+  source?: 'codex' | 'agents' | 'claude';
 }
 
 interface ClawdHubSkillMetadata {
@@ -1235,7 +1230,7 @@ export interface SkillsInstallRequest {
   subpath?: string;
   gitIdentityId?: string;
   scope: 'user' | 'project';
-  targetSource?: 'opencode' | 'agents';
+  targetSource?: 'codex' | 'agents';
   selections: SkillsInstallSelection[];
   conflictPolicy?: 'prompt' | 'skipAll' | 'overwriteAll';
   conflictDecisions?: Record<string, 'skip' | 'overwrite'>;
@@ -1244,12 +1239,12 @@ export interface SkillsInstallRequest {
 export type SkillsInstallError = SkillsRepoScanError | {
   kind: 'conflicts';
   message: string;
-  conflicts: Array<{ skillName: string; scope: 'user' | 'project'; source?: 'opencode' | 'agents' }>;
+  conflicts: Array<{ skillName: string; scope: 'user' | 'project'; source?: 'codex' | 'agents' }>;
 };
 
 export interface SkillsInstallResponse {
   ok: boolean;
-  installed?: Array<{ skillName: string; scope: 'user' | 'project'; source?: 'opencode' | 'agents' }>;
+  installed?: Array<{ skillName: string; scope: 'user' | 'project'; source?: 'codex' | 'agents' }>;
   skipped?: Array<{ skillName: string; reason: string }>;
   error?: SkillsInstallError;
   requiresReload?: boolean;

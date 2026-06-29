@@ -2,13 +2,13 @@
   "metadata": {
     "id": "orng-dark",
     "name": "Orng",
-    "description": "Ported from OpenCode Orng theme (dark variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex Orng theme (dark variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "dark",
     "tags": [
       "dark",
-      "opencode",
+      "codex",
       "ported",
       "orng"
     ]

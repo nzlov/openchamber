@@ -11,6 +11,7 @@ let questionReplyError: unknown | null = null
 let questionRejectError: unknown | null = null
 let sessionShareResult: { data?: unknown; error?: unknown; response?: { status?: number } } = {}
 const globalUpsertedSessions: unknown[] = []
+let currentSessionId = "session-a"
 
 const mockScopedClient = {
   permission: {
@@ -84,14 +85,15 @@ const mockSdk = {
   },
 }
 
-// Mock opencodeClient singleton
-mock.module("@/lib/opencode/client", () => ({
-  opencodeClient: {
+// Mock codexRuntimeClient singleton
+mock.module("@/lib/codex/runtime-client", () => ({
+  codexRuntimeClient: {
     getScopedSdkClient: (directory: string) => {
       scopedClientDirectories.push(directory)
       return mockScopedClient
     },
     getDirectory: () => "/test/project",
+    setDirectory: mock(() => {}),
     replyToPermission: mock((requestId: string, reply: string, options?: { directory?: string | null }) => {
       replyCalls.push({ method: "permission.reply", params: { requestID: requestId, reply, directory: options?.directory } })
       return Promise.resolve(true)
@@ -128,6 +130,7 @@ mock.module("@/stores/useConfigStore", () => ({
 mock.module("./session-ui-store", () => ({
   useSessionUIStore: {
     getState: () => ({
+      currentSessionId,
       getDirectoryForSession: (sessionId: string) => {
         if (sessionId === "session-a") return "/test/project"
         if (sessionId === "session-b") return "/other/project"
@@ -186,7 +189,7 @@ mock.module("./sync-refs", () => ({
 import { create, type StoreApi } from "zustand"
 import { INITIAL_STATE } from "./types"
 import type { DirectoryStore } from "./child-store"
-import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, CodexRuntimeSdkClient, Part, Session } from "@/lib/codex/types"
 
 type OptimisticAddCall = { sessionID: string; directory?: string | null; message: Message; parts: Part[] }
 type OptimisticRemoveCall = { sessionID: string; directory?: string | null; messageID: string }
@@ -221,6 +224,11 @@ function createChildStores(entries: Array<[string, StoreApi<DirectoryStore>]>) {
 }
 
 describe("fetchMessagesForSession startup race", () => {
+  beforeEach(() => {
+    currentSessionId = "session-a"
+    replyCalls.length = 0
+  })
+
   test("does not reject before sync action refs are initialized", async () => {
     const { fetchMessagesForSession } = await import("./session-actions")
 
@@ -233,6 +241,25 @@ describe("fetchMessagesForSession startup race", () => {
 
     expect(error).toBe(null)
   })
+
+  test("materializes an empty successful page for newly created sessions", async () => {
+    const sessionStore = createStore({}, {
+      session: [{ id: "session-a", title: "hi", time: { created: 1 } } as Session],
+    })
+    const childStores = createChildStores([["/test/project", sessionStore]])
+    const { fetchMessagesForSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
+
+    await fetchMessagesForSession("session-a", "/test/project")
+
+    expect(sessionStore.getState().message["session-a"]).toEqual([])
+    expect(replyCalls.some((call) =>
+      call.method === "session.messages"
+      && call.params.sessionID === "session-a"
+      && call.params.directory === "/test/project"
+      && call.params.limit === 50,
+    )).toBe(true)
+  })
 })
 
 describe("shareSession live state", () => {
@@ -242,100 +269,23 @@ describe("shareSession live state", () => {
     sessionShareResult = {}
   })
 
-  test("updates the directory live store after unsharing", async () => {
+  test("does not call removed Codex share endpoints", async () => {
     const sharedSession = { id: "session-a", time: { created: 1 }, share: { url: "https://share.example/a" } } as Session
-    const unsharedSession = { id: "session-a", time: { created: 1, updated: 2 } } as Session
-    const sessionStore = createStore({}, { session: [sharedSession] })
-    const otherStore = createStore({}, { session: [{ id: "other", time: { created: 1 } } as Session] })
-    const childStores = createChildStores([
-      ["/test/project", sessionStore],
-      ["/other/project", otherStore],
-    ])
-    sessionShareResult = { data: unsharedSession }
-
-    const { setActionRefs, unshareSession } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/current/project")
-
-    const result = await unshareSession("session-a")
-
-    expect(result).toBe(unsharedSession)
-    expect(replyCalls.find((call) => call.method === "session.unshare")?.params.directory).toBe("/test/project")
-    expect(sessionStore.getState().session[0].share).toBe(undefined)
-    expect(otherStore.getState().session[0].id).toBe("other")
-    expect(globalUpsertedSessions).toEqual([unsharedSession])
-  })
-
-  test("updates the directory live store after sharing", async () => {
-    const unsharedSession = { id: "session-a", time: { created: 1 } } as Session
-    const sharedSession = { id: "session-a", time: { created: 1, updated: 2 }, share: { url: "https://share.example/a" } } as Session
-    const sessionStore = createStore({}, { session: [unsharedSession] })
-    const childStores = createChildStores([["/test/project", sessionStore]])
-    sessionShareResult = { data: sharedSession }
-
-    const { setActionRefs, shareSession } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/current/project")
-
-    const result = await shareSession("session-a")
-
-    expect(result).toBe(sharedSession)
-    expect(replyCalls.find((call) => call.method === "session.share")?.params.directory).toBe("/test/project")
-    expect(sessionStore.getState().session[0].share?.url).toBe("https://share.example/a")
-    expect(globalUpsertedSessions).toEqual([sharedSession])
-  })
-
-  test("preserves live directory metadata while clearing share from null response", async () => {
-    const sharedSession = {
-      id: "session-a",
-      time: { created: 1 },
-      directory: "/test/project",
-      project: { worktree: "/test/project" },
-      share: { url: "https://share.example/a" },
-    } as SessionWithDirectory
-    const unsharedSession = {
-      id: "session-a",
-      time: { created: 1, updated: 2 },
-      share: null,
-    } as unknown as Session
     const sessionStore = createStore({}, { session: [sharedSession] })
     const childStores = createChildStores([["/test/project", sessionStore]])
-    sessionShareResult = { data: unsharedSession }
 
-    const { setActionRefs, unshareSession } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/current/project")
+    const { setActionRefs, shareSession, unshareSession } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/current/project")
 
-    await unshareSession("session-a")
+    const shareResult = await shareSession("session-a")
+    const unshareResult = await unshareSession("session-a")
 
-    const liveSession = sessionStore.getState().session[0] as SessionWithDirectory & { share?: null }
-    expect(liveSession.share).toBe(null)
-    expect(liveSession.directory).toBe("/test/project")
-    expect(liveSession.project?.worktree).toBe("/test/project")
-  })
-
-  test("strips oversized diff snapshots before updating session stores", async () => {
-    const sessionWithDiff = {
-      id: "session-a",
-      time: { created: 1, updated: 2 },
-      share: { url: "https://share.example/a" },
-      summary: {
-        diffs: [{ file: "a.txt", before: "old", after: "new", additions: 1, deletions: 1 }],
-      },
-    } as unknown as Session
-    const sessionStore = createStore({}, { session: [{ id: "session-a", time: { created: 1 } } as Session] })
-    const childStores = createChildStores([["/test/project", sessionStore]])
-    sessionShareResult = { data: sessionWithDiff }
-
-    const { setActionRefs, shareSession } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/current/project")
-
-    const result = await shareSession("session-a")
-
-    const storedDiff = ((sessionStore.getState().session[0] as { summary?: { diffs?: Array<Record<string, unknown>> } }).summary?.diffs ?? [])[0]
-    const globalDiff = (((globalUpsertedSessions[0] as { summary?: { diffs?: Array<Record<string, unknown>> } }).summary?.diffs ?? [])[0])
-    const resultDiff = ((result as { summary?: { diffs?: Array<Record<string, unknown>> } }).summary?.diffs ?? [])[0]
-    expect(storedDiff.before).toBe(undefined)
-    expect(storedDiff.after).toBe(undefined)
-    expect(globalDiff.before).toBe(undefined)
-    expect(resultDiff.after).toBe(undefined)
+    expect(shareResult).toBe(null)
+    expect(unshareResult).toBe(null)
+    expect(replyCalls.find((call) => call.method === "session.share")).toBe(undefined)
+    expect(replyCalls.find((call) => call.method === "session.unshare")).toBe(undefined)
+    expect(sessionStore.getState().session[0]).toBe(sharedSession)
+    expect(globalUpsertedSessions).toEqual([])
   })
 })
 
@@ -357,7 +307,7 @@ describe("optimisticSend target directory", () => {
     let sentMessageID = ""
 
     const { optimisticSend, setActionRefs, setOptimisticRefs } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/current/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/current/project")
     setOptimisticRefs(
       (input) => {
         optimisticAdd = input
@@ -398,7 +348,7 @@ describe("optimisticSend target directory", () => {
     switchRuntimeEndpoint({ apiBaseUrl: "http://runtime-a.test", runtimeKey: "runtime-a" })
 
     const { optimisticSend, setActionRefs, setOptimisticRefs } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/target/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/target/project")
     setOptimisticRefs(
       (input) => {
         optimisticAdd = input
@@ -461,7 +411,7 @@ describe("respondToPermission passes directory", () => {
     const childStores = createChildStores([["/test/project", store]])
 
     const { setActionRefs, respondToPermission } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     await respondToPermission("session-a", "perm-1", "once")
 
@@ -475,7 +425,7 @@ describe("respondToPermission passes directory", () => {
     const childStores = createChildStores([])
 
     const { setActionRefs, respondToPermission } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     await respondToPermission("session-b", "perm-2", "always")
 
@@ -489,7 +439,7 @@ describe("respondToPermission passes directory", () => {
     const childStores = createChildStores([])
 
     const { setActionRefs, respondToPermission } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/fallback/dir")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/fallback/dir")
 
     await respondToPermission("unknown-session", "perm-3", "reject")
 
@@ -529,7 +479,7 @@ describe("revertToMessage passes session directory", () => {
     sessionRevertResult = { data: { id: "session-a", time: { created: 1, updated: 2 }, revert: { messageID: "msg_2" } } }
 
     const { setActionRefs, revertToMessage } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/current/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/current/project")
 
     await revertToMessage("session-a", "msg_2")
 
@@ -552,7 +502,7 @@ describe("revertToMessage passes session directory", () => {
     sessionRevertResult = { error: { message: "rejected" }, response: { status: 500 } }
 
     const { setActionRefs, revertToMessage } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     let thrown: unknown
     try {
@@ -589,7 +539,7 @@ describe("dismissPermission passes directory", () => {
     const childStores = createChildStores([["/test/project", store]])
 
     const { setActionRefs, dismissPermission } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     await dismissPermission("session-a", "perm-10")
 
@@ -611,7 +561,7 @@ describe("respondToQuestion passes directory", () => {
     const childStores = createChildStores([])
 
     const { setActionRefs, respondToQuestion } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     await respondToQuestion("session-a", "q-1", [["answer1"]])
 
@@ -638,7 +588,7 @@ describe("respondToQuestion passes directory", () => {
     questionReplyError = Object.assign(new Error("question.reply failed (404): QuestionNotFoundError"), { status: 404 })
 
     const { setActionRefs, respondToQuestion } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     let thrown: unknown
     try {
@@ -663,7 +613,7 @@ describe("rejectQuestion passes directory", () => {
     const childStores = createChildStores([])
 
     const { setActionRefs, rejectQuestion } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     await rejectQuestion("session-a", "q-2")
 
@@ -699,7 +649,7 @@ describe("dismissOpenQuestionsForSession", () => {
     const childStores = createChildStores([["/test/project", store]])
 
     const { setActionRefs, dismissOpenQuestionsForSession } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     const dismissed = await dismissOpenQuestionsForSession("session-a")
 
@@ -723,7 +673,7 @@ describe("dismissOpenQuestionsForSession", () => {
     const childStores = createChildStores([["/test/project", store]])
 
     const { setActionRefs, dismissOpenQuestionsForSession } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     const dismissed = await dismissOpenQuestionsForSession("session-a")
 
@@ -748,7 +698,7 @@ describe("dismissOpenQuestionsForSession", () => {
     questionRejectError = Object.assign(new Error("question.reject failed (404): QuestionNotFoundError"), { status: 404 })
 
     const { setActionRefs, dismissOpenQuestionsForSession } = await import("./session-actions")
-    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/test/project")
+    setActionRefs(mockSdk as unknown as CodexRuntimeSdkClient, childStores, () => "/test/project")
 
     const dismissed = await dismissOpenQuestionsForSession("session-a")
 

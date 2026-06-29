@@ -1,4 +1,4 @@
-import type { Session } from "@opencode-ai/sdk/v2"
+import type { Session } from "@/lib/codex/types"
 
 type BlockingRequest = { id: string }
 

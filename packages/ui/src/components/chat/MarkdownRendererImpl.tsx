@@ -1,7 +1,7 @@
 import React from 'react';
 import morphdom from 'morphdom';
 import { renderMermaidASCII, renderMermaidSVG } from 'beautiful-mermaid';
-import type { Part } from '@opencode-ai/sdk/v2';
+import type { Part } from '@/lib/codex/types';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
@@ -1019,7 +1019,7 @@ const useMorphdomMarkdown = ({
   // Synchronous first paint: while the async parse is in-flight, show escaped
   // plain text immediately so there is no blank frame on initial mount. Only
   // runs when the target is empty — subsequent updates keep the prior rich DOM
-  // until the next async render morphs in (no flash). Mirrors OpenCode's
+  // until the next async render morphs in (no flash). Mirrors Codex's
   // `initialValue: fallback(text)` resource pattern.
   React.useLayoutEffect(() => {
     const container = containerRef.current;

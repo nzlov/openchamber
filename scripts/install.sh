@@ -157,7 +157,7 @@ main() {
   echo "  ╭───────────────────────────────────╮"
   echo "  │                                   │"
   echo "  │   OpenChamber Installer           │"
-  echo "  │   Web interface for OpenCode      │"
+  echo "  │   Web interface for Codex         │"
   echo "  │                                   │"
   echo "  ╰───────────────────────────────────╯"
   echo ""
@@ -264,7 +264,7 @@ EOF
     fi
     echo ""
     echo "  Prerequisites:"
-    echo "    Make sure OpenCode is running: opencode serve"
+    echo "    Make sure the Codex CLI is installed and available on PATH"
     echo ""
   else
     echo ""

@@ -1,5 +1,5 @@
-import type { SessionStatus } from '@opencode-ai/sdk/v2/client'
-import type { Session } from '@opencode-ai/sdk/v2'
+import type { SessionStatus } from '@/lib/codex/types'
+import type { Session } from '@/lib/codex/types'
 import type { State } from './types'
 
 type LiveStateSlice = Pick<State, 'session' | 'session_status'>

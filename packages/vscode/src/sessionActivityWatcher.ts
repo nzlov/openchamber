@@ -1,5 +1,4 @@
-import { createOpencodeClient } from '@opencode-ai/sdk/v2';
-import type { OpenCodeManager } from './opencode';
+import type { CodexManager } from './codex';
 
 // Session activity tracking (mirrors web server and desktop behavior)
 type ActivityPhase = 'idle' | 'busy' | 'cooldown';
@@ -39,15 +38,15 @@ const unwrapGlobalEventPayload = (eventData: unknown): Record<string, unknown> |
   return eventData as Record<string, unknown>;
 };
 
-const reconcileSessionActivityFromStatus = async (manager: OpenCodeManager): Promise<void> => {
-  const baseUrl = manager.getApiUrl();
+const reconcileSessionActivityFromStatus = async (manager: CodexManager): Promise<void> => {
+  const baseUrl = manager.getRuntimeApiUrl();
   if (!baseUrl) {
     return;
   }
 
   const url = new URL('/session/status', baseUrl);
   const response = await fetch(url.toString(), {
-    headers: manager.getOpenCodeAuthHeaders(),
+    headers: manager.getRuntimeAuthHeaders(),
   });
 
   if (!response.ok) {
@@ -160,27 +159,52 @@ const deriveSessionActivity = (payload: Record<string, unknown>): SessionActivit
   return null;
 };
 
-const waitForOpenCodePort = async (manager: OpenCodeManager, timeoutMs = 30000): Promise<number | null> => {
+const waitForCodexRuntime = async (manager: CodexManager, timeoutMs = 30000): Promise<boolean> => {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const apiUrl = manager.getApiUrl();
+    const apiUrl = manager.getRuntimeApiUrl();
     if (apiUrl) {
-      try {
-        const url = new URL(apiUrl);
-        if (url.port) {
-          return parseInt(url.port, 10);
-        }
-      } catch {
-        // ignore
-      }
+      return true;
     }
     await new Promise(r => setTimeout(r, 500));
   }
-  return null;
+  return false;
 };
 
+async function* streamServerEvents(response: Response): AsyncGenerator<unknown> {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let boundary = buffer.indexOf('\n\n');
+    while (boundary >= 0) {
+      const chunk = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const data = chunk
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trim())
+        .join('\n');
+      if (data) {
+        try {
+          yield JSON.parse(data) as unknown;
+        } catch {
+          yield data;
+        }
+      }
+      boundary = buffer.indexOf('\n\n');
+    }
+  }
+}
+
 export const startGlobalEventWatcher = async (
-  manager: OpenCodeManager,
+  manager: CodexManager,
   provider: { postMessage: (message: unknown) => void }
 ): Promise<void> => {
   if (globalEventWatcherAbortController) {
@@ -191,12 +215,12 @@ export const startGlobalEventWatcher = async (
   clearGlobalEventWatcherRetry();
   chatViewProvider = provider;
 
-  const port = await waitForOpenCodePort(manager);
+  const ready = await waitForCodexRuntime(manager);
   if (startToken !== globalEventWatcherStartToken) {
     return;
   }
-  if (!port) {
-    console.warn('[VSCode:Activity] OpenCode port unavailable; will retry');
+  if (!ready) {
+    console.warn('[VSCode:Activity] Codex runtime unavailable; will retry');
     globalEventWatcherRetryTimer = setTimeout(() => {
       globalEventWatcherRetryTimer = null;
       if (startToken === globalEventWatcherStartToken) {
@@ -216,15 +240,11 @@ export const startGlobalEventWatcher = async (
       attempt += 1;
 
       try {
-        const baseUrl = manager.getApiUrl();
+        const baseUrl = manager.getRuntimeApiUrl();
         if (!baseUrl) {
-          throw new Error('OpenCode API URL not available');
+          throw new Error('Codex API URL not available');
         }
 
-        const client = createOpencodeClient({
-          baseUrl,
-          headers: manager.getOpenCodeAuthHeaders(),
-        });
         try {
           await reconcileSessionActivityFromStatus(manager);
         } catch (error) {
@@ -233,14 +253,21 @@ export const startGlobalEventWatcher = async (
             error instanceof Error ? error.message : error,
           );
         }
-        const result = await client.global.event({
+        const eventUrl = new URL('/global/event', baseUrl);
+        const result = await fetch(eventUrl.toString(), {
+          headers: {
+            Accept: 'text/event-stream',
+            ...manager.getRuntimeAuthHeaders(),
+          },
           signal,
-          sseMaxRetryAttempts: 0,
         });
+        if (!result.ok) {
+          throw new Error(`global event stream failed (${result.status})`);
+        }
 
         console.log('[VSCode:Activity] connected');
 
-        for await (const event of result.stream) {
+        for await (const event of streamServerEvents(result)) {
           const payload = unwrapGlobalEventPayload((event as { payload?: unknown }).payload ?? event);
           if (payload) {
             const activity = deriveSessionActivity(payload);

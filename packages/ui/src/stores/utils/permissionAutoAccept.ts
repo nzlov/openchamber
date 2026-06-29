@@ -1,4 +1,4 @@
-import type { Session } from "@opencode-ai/sdk/v2/client";
+import type { Session } from "@/lib/codex/types";
 
 export type PermissionAutoAcceptMap = Record<string, boolean>;
 

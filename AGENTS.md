@@ -2,13 +2,13 @@
 
 ## Core purpose
 
-OpenChamber provides UI runtimes (web/desktop/VS Code) for interacting with an OpenCode server (local auto-start or remote URL). Official OpenCode traffic goes through `@opencode-ai/sdk`; OpenChamber-owned runtime capabilities go through `RuntimeAPIs`, `runtimeFetch`, and browser/realtime URL helpers.
+OpenChamber provides UI runtimes (web/desktop/VS Code) for interacting with Codex. Codex runtime process and protocol logic lives in `packages/web/server/lib/codex/`; OpenChamber-owned runtime capabilities go through `RuntimeAPIs`, `runtimeFetch`, and browser/realtime URL helpers.
 
 ## Runtime architecture (IMPORTANT)
 
 - `Desktop` (Electron) boots the web server **in the same Node process** as the Electron main, then loads the web UI from `http://127.0.0.1:<port>`. No sidecar subprocess.
 - Backend/domain logic lives in `packages/web/server/*` (and `packages/vscode/*` for VS Code bridge/runtime parity). Electron owns the desktop shell/security boundary: windows, menus, dialogs, notifications, updater, deep-links, runtime host switching, local IPC gates, and SSH/tunnel management.
-- Do not add OpenCode feature backends to the native shell. Shared UI features should remain server/runtime APIs unless the capability is inherently native.
+- Do not add Codex feature backends to the native shell. Shared UI features should remain server/runtime APIs unless the capability is inherently native.
 
 ### Desktop Shell
 
@@ -79,11 +79,17 @@ GitHub authentication, OAuth device flow, Octokit client factory, and repository
 
 - Module docs: `packages/web/server/lib/github/DOCUMENTATION.md`
 
-##### opencode
+##### codex
 
-OpenCode server integration utilities including config management, provider authentication, and UI authentication.
+Codex agent runtime integration utilities including binary resolution, process/session management, and settings access.
 
-- Module docs: `packages/web/server/lib/opencode/DOCUMENTATION.md`
+- Module docs: `packages/web/server/lib/codex/DOCUMENTATION.md`
+
+##### openchamber-runtime
+
+OpenChamber-owned runtime routes and server helpers layered around the Codex runtime.
+
+- Module docs: `packages/web/server/lib/openchamber-runtime/DOCUMENTATION.md`
 
 ##### notifications
 
@@ -181,13 +187,14 @@ All scripts are in `package.json`.
 - VS Code extension host: `packages/vscode/src/extension.ts`
 - VS Code webview bootstrap: `packages/vscode/webview/main.tsx`
 
-## OpenCode integration
+## Codex integration
 
-- UI client wrapper: `packages/ui/src/lib/opencode/client.ts` (imports `@opencode-ai/sdk/v2`)
-- Sync/event pipeline: app roots mount `SyncProvider` from `packages/ui/src/sync/sync-context.tsx`; OpenCode SSE/WS event handling lives in `packages/ui/src/sync/event-pipeline.ts`
-- Web server embeds/starts OpenCode server: `packages/web/server/index.js` (`createOpencodeServer`)
-- Web runtime filesystem endpoints: `packages/web/server/lib/fs/routes.js`, registered by `packages/web/server/lib/opencode/feature-routes-runtime.js`
-- External server support: Set `OPENCODE_HOST` (full base URL, e.g. `http://hostname:4096`) or `OPENCODE_PORT`, plus `OPENCODE_SKIP_START=true`, to connect to existing OpenCode instance
+- UI runtime client: `packages/ui/src/lib/codex/runtime-client.ts`
+- Sync/event pipeline: app roots mount `SyncProvider` from `packages/ui/src/sync/sync-context.tsx`; Codex status/event handling lives in `packages/ui/src/sync/event-pipeline.ts`
+- Web server starts and owns the Codex CLI runtime through `packages/web/server/lib/codex/`, wired by `packages/web/server/index.js`
+- OpenChamber feature/runtime endpoints: `packages/web/server/lib/openchamber-runtime/feature-routes-runtime.js`
+- Codex binary resolution: `OPENCHAMBER_CODEX_BINARY`, then `CODEX_BINARY`, then `codex` on `PATH`
+- Codex home resolution: `CODEX_HOME`, otherwise `~/.codex`
 
 ## Key UI patterns (reference files)
 
@@ -208,7 +215,7 @@ All scripts are in `package.json`.
 
 ## Agent constraints
 
-- Do not modify `../opencode` (separate repo).
+- Do not modify `../codex` (separate repo).
 - Do not run git/GitHub commands unless explicitly asked.
 - Keep baseline green (run `bun run type-check`, `bun run lint` before finalizing changes).
 
@@ -335,7 +342,7 @@ Project skills live under `.agents/skills/*/SKILL.md`. Before editing, agents **
 | Work being done | Required skill call |
 |---|---|
 | Terminal CLI commands, prompts, or output formatting, especially `packages/web/bin/*` | `skill({ name: "clack-cli-patterns" })` |
-| Shared UI data access, `RuntimeAPIs`, `runtimeFetch`, `runtime-url`, OpenCode SDK calls, VS Code bridges/proxies, authenticated browser assets, Electron runtime switching, or web server API endpoints | `skill({ name: "ui-api-decoupling" })` |
+| Shared UI data access, `RuntimeAPIs`, `runtimeFetch`, `runtime-url`, Codex runtime calls, VS Code bridges/proxies, authenticated browser assets, Electron runtime switching, or web server API endpoints | `skill({ name: "ui-api-decoupling" })` |
 | UI components, styling, visual elements, colors, buttons, or icons | `skill({ name: "theme-system" })` |
 | User-facing UI text: labels, buttons, placeholders, aria labels, empty/error/loading states, toasts, dialogs, settings copy, or navigation labels | `skill({ name: "locale-ui-patterns" })` |
 | Settings pages, settings dialogs, configuration UI, or visual/layout changes inside Settings | `skill({ name: "settings-ui-patterns" })` |
@@ -436,7 +443,7 @@ A single store with N properties means every subscriber re-evaluates on every st
 
 ### Directory context
 
-- **Never cache directory strings in closures.** Directory can change at any time (worktree switch). Read it dynamically from `opencodeClient.getDirectory()` at call time.
+- **Never cache directory strings in closures.** Directory can change at any time (worktree switch). Read it dynamically from the current runtime/session state at call time.
 - **Pass directory hints when the source of truth isn't available yet.** Newly created sessions aren't in the sync store until SSE delivers them. Pass the known directory as a parameter instead of relying on lookup.
 
 ## Regression-prevention checklist

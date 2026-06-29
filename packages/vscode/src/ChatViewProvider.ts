@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { handleBridgeMessage, type BridgeRequest, type BridgeResponse } from './bridge';
 import { getThemeKindName } from './theme';
-import type { OpenCodeManager, ConnectionStatus } from './opencode';
+import type { CodexManager, ConnectionStatus } from './codex';
 import { getWebviewShikiThemes } from './shikiThemes';
 import { getWebviewHtml } from './webviewHtml';
 import { openSseProxy } from './sseProxy';
@@ -73,7 +73,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly _context: vscode.ExtensionContext,
     private readonly _extensionUri: vscode.Uri,
-    private readonly _openCodeManager?: OpenCodeManager
+    private readonly _codexManager?: CodexManager
   ) {
     this._webviewDevServerUrl = resolveWebviewDevServerUrl(this._context);
 
@@ -138,7 +138,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
 
       if (message.type === 'restartApi') {
-        await this._openCodeManager?.restart();
+        await this._codexManager?.restart();
         return;
       }
 
@@ -155,7 +155,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
 
       const response = await handleBridgeMessage(message, {
-        manager: this._openCodeManager,
+        manager: this._codexManager,
         context: this._context,
       });
       void this._sendMessageWithRetry(response);
@@ -319,18 +319,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Ask the webview to run the full OpenCode reload flow (overlay + managed
-   * restart via the bridge + config/data refresh) — the same flow used after an
-   * OpenCode update. Returns false if no webview is resolved to drive it.
+   * Ask the webview to run the full runtime reload flow. Returns false if no
+   * webview is resolved to drive it.
    */
-  public reloadOpenCode(): boolean {
+  public reloadApi(): boolean {
     if (!this._view) {
       return false;
     }
 
     this._view.webview.postMessage({
       type: 'command',
-      command: 'reloadOpenCode',
+      command: 'reloadApi',
     });
     return true;
   }
@@ -531,7 +530,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const { path, headers } = (payload || {}) as { path?: string; headers?: Record<string, string> };
     const normalizedPath = typeof path === 'string' && path.trim().length > 0 ? path.trim() : '/event';
 
-    if (!this._openCodeManager) {
+    if (!this._codexManager) {
       return {
         id,
         type,
@@ -545,7 +544,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const start = await openSseProxy({
-        manager: this._openCodeManager,
+        manager: this._codexManager,
         path: normalizedPath,
         headers: this._buildSseHeaders(headers),
         signal: controller.signal,
@@ -611,7 +610,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const workspaceFolders = resolveWorkspaceFolders(vscode.workspace.workspaceFolders ?? []);
     // Use cached values which are updated by onStatusChange callback
     const initialStatus = this._cachedStatus;
-    const cliAvailable = this._openCodeManager?.isCliAvailable() ?? false;
+    const cliAvailable = this._codexManager?.isCliAvailable() ?? false;
 
     return getWebviewHtml({
       webview,

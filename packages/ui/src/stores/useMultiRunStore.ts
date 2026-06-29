@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import { routeMessage, useSessionUIStore } from '@/sync/session-ui-store';
 import { devtools } from 'zustand/middleware';
 import type { CreateMultiRunParams, CreateMultiRunResult } from '@/types/multirun';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { getWorktreeSetupWaitEnabled, saveWorktreeSetupCommands } from '@/lib/openchamberConfig';
 import type { ProjectRef } from '@/lib/worktrees/worktreeManager';
 import { createWorktreeWithDefaults, resolveRootTrackingRemote } from '@/lib/worktrees/worktreeCreate';
@@ -210,9 +210,9 @@ export const useMultiRunStore = create<MultiRunStore>()(
 
               try {
                 if (!shouldIsolateRuns) {
-                  const session = await opencodeClient.withDirectory(
+                  const session = await codexRuntimeClient.withDirectory(
                     directory,
-                    () => opencodeClient.createSession({ title: sessionTitle }),
+                    () => codexRuntimeClient.createSession({ title: sessionTitle }),
                   );
                   registerCreatedSession(session, directory);
 
@@ -249,9 +249,9 @@ export const useMultiRunStore = create<MultiRunStore>()(
                   await waitForWorktreeBootstrap(worktreeMetadata.path);
                 }
 
-                const session = await opencodeClient.withDirectory(
+                const session = await codexRuntimeClient.withDirectory(
                   worktreeMetadata.path,
-                  () => opencodeClient.createSession({ title: sessionTitle }),
+                  () => codexRuntimeClient.createSession({ title: sessionTitle }),
                 );
                 registerCreatedSession(session, worktreeMetadata.path);
 

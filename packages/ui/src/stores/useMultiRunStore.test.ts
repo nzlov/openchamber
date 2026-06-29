@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 
 const upsertedSessions: Session[] = [];
 const registeredDirectories: Array<{ sessionID: string; directory: string }> = [];
@@ -44,8 +44,8 @@ mock.module('@/sync/session-ui-store', () => ({
   },
 }));
 
-mock.module('@/lib/opencode/client', () => ({
-  opencodeClient: {
+mock.module('@/lib/codex/runtime-client', () => ({
+  codexRuntimeClient: {
     withDirectory: async (directory: string, fn: () => Promise<Session>) => {
       const previous = currentDirectory;
       currentDirectory = directory;

@@ -76,7 +76,7 @@ export const SkillsSidebar: React.FC<SkillsSidebarProps> = ({ onItemSelect }) =>
     }
 
     // Set draft and open the page for editing
-    setSkillDraft({ name: newName, scope: 'user', source: 'opencode', description: '' });
+    setSkillDraft({ name: newName, scope: 'user', source: 'codex', description: '' });
     setSelectedSkill(newName);
     onItemSelect?.();
 
@@ -130,7 +130,7 @@ export const SkillsSidebar: React.FC<SkillsSidebarProps> = ({ onItemSelect }) =>
       setSkillDraft({
         name: newName,
         scope: skill.scope || 'user',
-        source: skill.source || 'opencode',
+        source: skill.source || 'codex',
         description: detail.sources.md.fields.includes('description') ? '' : '', // Will be populated from page
         instructions: '',
       });
@@ -459,7 +459,7 @@ const SkillListItem: React.FC<SkillListItemProps> = ({
     ? t('settings.skills.sidebar.badge.claude')
     : skill.source === 'agents'
       ? t('settings.skills.sidebar.badge.agents')
-      : t('settings.skills.sidebar.badge.opencode');
+      : t('settings.skills.sidebar.badge.codex');
   const badgeClassName = 'typography-micro text-muted-foreground bg-[var(--surface-muted)] px-1 rounded flex-shrink-0 leading-none pb-px border border-[var(--interactive-border)]/50';
   const isBuiltIn = isBuiltInSkill(skill);
   const [isContextMenuOpen, setIsContextMenuOpen] = React.useState(false);

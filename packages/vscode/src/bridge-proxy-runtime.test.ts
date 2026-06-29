@@ -20,8 +20,8 @@ const deps = {
 const ctx = {
   manager: {
     getStatus: () => 'connected',
-    getApiUrl: () => 'http://127.0.0.1:3902',
-    getOpenCodeAuthHeaders: () => ({}),
+    getRuntimeApiUrl: () => 'http://127.0.0.1:3902',
+    getRuntimeAuthHeaders: () => ({}),
     onStatusChange: (cb: (status: string) => void) => {
       cb('connected');
       return { dispose: () => {} };

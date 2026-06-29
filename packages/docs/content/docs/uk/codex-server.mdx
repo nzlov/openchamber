@@ -1,0 +1,94 @@
+---
+title: Codex Runtime
+description: Підключіть OpenChamber до локального або віддаленого сервера Codex.
+---
+
+# Codex Runtime
+
+OpenChamber працює поверх сервера Codex. За замовчуванням він сам запускає такий сервер, тож вам нічого робити не доводиться. Ця сторінка потрібна лише тоді, коли ви хочете спрямувати OpenChamber на сервер, який ви вже запускаєте, або керувати тим, що він запускає.
+
+## Як OpenChamber знаходить сервер
+
+Коли OpenChamber стартує, він шукає сервер у такому порядку:
+
+1. повторно використовує сервер, який уже запустив
+2. підключається до зовнішнього, якщо ви це налаштували (див. нижче)
+3. автоматично виявляє сервер на стандартному порту (`4096`)
+4. інакше — запускає й керує власним
+
+Якщо нічого не налаштовано, крок 4 відбувається автоматично, і все працює.
+
+## Підключення до сервера, який ви вже запускаєте
+
+Задайте це перед запуском OpenChamber:
+
+```bash
+CODEX_HOME=~/.codex openchamber
+OPENCHAMBER_CODEX_BINARY=/path/to/codex openchamber
+```
+
+
+
+
+## Керування сервером із CLI
+
+```bash
+openchamber status
+openchamber logs
+openchamber restart
+openchamber stop
+```
+
+`openchamber` сам по собі запускає сервер у фоні. Додайте `--foreground`, щоб лишити його прив'язаним до вашого терміналу.
+
+## Запуск OpenChamber при вході в систему
+
+Скористайтеся `startup enable`, щоб встановити нативний користувацький сервіс. OpenChamber використовує `launchd` на macOS, `systemd --user` на Linux і Task Scheduler на Windows.
+
+```bash
+openchamber startup enable
+openchamber startup status
+openchamber startup disable
+```
+
+Щоб захистити UI, задайте пароль під час увімкнення сервісу:
+
+```bash
+OPENCHAMBER_UI_PASSWORD='secret' openchamber startup enable
+```
+
+Для headless-сервера, який стартує під час входу та використовується desktop або mobile застосунками, додайте `--api-only` і доступний host:
+
+```bash
+openchamber startup enable --port 3000 --api-only --host 0.0.0.0 --ui-password secret
+```
+
+`startup enable` зберігає знімок поточного середовища в сервісі, щоб запуск був ближчим до ручного запуску `openchamber` з тієї самої shell-сесії. Так зберігаються токени провайдерів, `PATH`, налаштування SSH agent та інші CLI-змінні для auth/config. Використайте `--no-env-snapshot`, якщо потрібне мінімальне середовище сервісу.
+
+Startup-сервіс пам'ятає `--port`, `--host`, `--ui-password` і `--api-only`. CLI restart і restart під час оновлення повторно використовують ці збережені налаштування.
+
+Щоб створити link підключення для іншого застосунку OpenChamber, використайте:
+
+```bash
+openchamber connect-url --port 3000 --server http://your-host:3000 --qr
+```
+
+Запустіть `openchamber connect-url --help`, щоб побачити всі опції link, зокрема `--name`, `--lan`, `--server`, `--api-only`, `--ui-password` і `--qr`.
+
+Тунелями для такого запущеного сервісу можна керувати окремо:
+
+```bash
+openchamber tunnel start --port 3000
+openchamber tunnel stop --port 3000
+```
+
+Зупинка тунелю не перезапускає сервіс або застосунок.
+
+## «Codex перезапускається»
+
+Поки сервер запускається або перезапускається, OpenChamber показує стан «Codex перезапускається» і призупиняє запити, доки той не буде готовий. Це нормально одразу після запуску чи перезапуску. Якщо стан так і не зникає, див. [Підключення до Codex](/uk/troubleshooting/codex-connection/).
+
+## Пов'язане
+
+- [Провайдери, моделі та агенти](/uk/providers/) — налаштуйте, із чим спілкується сервер
+- [Підключення до Codex](/uk/troubleshooting/codex-connection/) — якщо не вдається підключитися

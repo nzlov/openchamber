@@ -15,14 +15,14 @@ import { toast } from '@/components/ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from "@/components/icon/Icon";
 import type { IconName } from "@/components/icon/icons";
-import { reloadOpenCodeConfiguration } from '@/stores/useAgentsStore';
+import { reloadRuntimeConfiguration } from '@/stores/useAgentsStore';
 import { cn } from '@/lib/utils';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import type { ModelMetadata } from '@/types';
 import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { shouldLoadAvailableProviders } from './providerAvailability';
 
 const formatCompactNumber = (value: number) => new Intl.NumberFormat(getCurrentIntlLocale(), {
@@ -188,7 +188,7 @@ export const ProvidersPage: React.FC = () => {
     const loadAuthMethods = async () => {
       setAuthLoading(true);
       try {
-        const result = await opencodeClient.getSdkClient().provider.auth();
+        const result = await codexRuntimeClient.getSdkClient().provider.auth();
         if (result.error) {
           throw new Error(`provider.auth failed: ${String(result.error)}`);
         }
@@ -223,7 +223,7 @@ export const ProvidersPage: React.FC = () => {
       setAvailableLoading(true);
       setAvailableError(null);
       try {
-        const result = await opencodeClient.getSdkClient().provider.list();
+        const result = await codexRuntimeClient.getSdkClient().provider.list();
         if (result.error) {
           throw new Error(`provider.list failed: ${String(result.error)}`);
         }
@@ -339,7 +339,7 @@ export const ProvidersPage: React.FC = () => {
     setAuthBusyKey(busyKey);
 
     try {
-      const result = await opencodeClient.getSdkClient().auth.set({
+      const result = await codexRuntimeClient.getSdkClient().auth.set({
         providerID: providerId,
         auth: { type: 'api', key: apiKey },
       });
@@ -349,7 +349,7 @@ export const ProvidersPage: React.FC = () => {
 
       toast.success(t('settings.providers.page.toast.apiKeySaved'));
       setApiKeyInputs((prev) => ({ ...prev, [providerId]: '' }));
-      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      await reloadRuntimeConfiguration({ scopes: ["providers"], mode: "active" });
       setSelectedProvider(providerId);
     } catch (error) {
       console.error('Failed to save API key:', error);
@@ -364,7 +364,7 @@ export const ProvidersPage: React.FC = () => {
     setAuthBusyKey(busyKey);
 
     try {
-      const result = await opencodeClient.getSdkClient().provider.oauth.authorize({
+      const result = await codexRuntimeClient.getSdkClient().provider.oauth.authorize({
         providerID: providerId,
         method: methodIndex,
       });
@@ -430,7 +430,7 @@ export const ProvidersPage: React.FC = () => {
         requestBody.code = code;
       }
 
-      const result = await opencodeClient.getSdkClient().provider.oauth.callback({
+      const result = await codexRuntimeClient.getSdkClient().provider.oauth.callback({
         providerID: providerId,
         method: requestBody.method,
         code: requestBody.code,
@@ -442,7 +442,7 @@ export const ProvidersPage: React.FC = () => {
       toast.success(t('settings.providers.page.toast.oauthCompleted'));
       setOauthCodes((prev) => ({ ...prev, [codeKey]: '' }));
       setPendingOAuth(null);
-      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      await reloadRuntimeConfiguration({ scopes: ["providers"], mode: "active" });
       setSelectedProvider(providerId);
     } catch (error) {
       console.error('Failed to complete OAuth flow:', error);
@@ -488,7 +488,7 @@ export const ProvidersPage: React.FC = () => {
       }
 
       toast.success(t('settings.providers.page.toast.providerDisconnected'));
-      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      await reloadRuntimeConfiguration({ scopes: ["providers"], mode: "active" });
     } catch (error) {
       console.error('Failed to disconnect provider:', error);
       toast.error(t('settings.providers.page.toast.providerDisconnectFailed'));
@@ -503,7 +503,7 @@ export const ProvidersPage: React.FC = () => {
         <div className="text-center text-muted-foreground">
           <Icon name="stack" className="mx-auto mb-3 h-12 w-12 opacity-50" />
           <p className="typography-body">{t('settings.providers.page.empty.noProvidersDetected')}</p>
-          <p className="typography-meta mt-1 opacity-75">{t('settings.providers.page.empty.checkOpenCodeConfiguration')}</p>
+          <p className="typography-meta mt-1 opacity-75">{t('settings.providers.page.empty.checkCodexConfiguration')}</p>
         </div>
       </div>
     );

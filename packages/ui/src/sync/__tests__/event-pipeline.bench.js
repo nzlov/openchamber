@@ -54,7 +54,7 @@ function createReplaySdk(events, hold) {
  * Token-stream workload: N sessions in `directoryCount` directories, each
  * emitting `tokensPerSession` text deltas plus a few framing events.
  *
- * Shape is intentionally close to a real opencode session:
+ * Shape is intentionally close to a real codex session:
  *   session.status(busy)
  *   message.part.delta × tokensPerSession   (coalescible)
  *   message.part.updated                    (final state)

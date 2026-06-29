@@ -1,6 +1,6 @@
 import React from 'react';
 import { Virtualizer } from 'virtua';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 
 // Archived buckets routinely grow into the hundreds/thousands; virtualize
 // when we cross this row count so the DOM stays bounded.

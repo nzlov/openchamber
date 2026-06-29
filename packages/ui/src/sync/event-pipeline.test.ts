@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client"
+import type { Event, CodexRuntimeSdkClient } from "@/lib/codex/types"
 import { createEventPipeline } from "./event-pipeline"
 
 const failAfter = (ms: number) => new Promise<never>((_, reject) => {
@@ -33,7 +33,7 @@ function deltaEvent(delta: string): Event {
   } as Event
 }
 
-function createSdk(events: Event[], streamFinished: () => void): OpencodeClient {
+function createSdk(events: Event[], streamFinished: () => void): CodexRuntimeSdkClient {
   return {
     global: {
       event: async ({ signal }: { signal: AbortSignal }) => ({
@@ -52,7 +52,7 @@ function createSdk(events: Event[], streamFinished: () => void): OpencodeClient 
         })(),
       }),
     },
-  } as unknown as OpencodeClient
+  } as unknown as CodexRuntimeSdkClient
 }
 
 describe("createEventPipeline", () => {

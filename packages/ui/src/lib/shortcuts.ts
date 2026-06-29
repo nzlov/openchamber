@@ -128,8 +128,8 @@ const SHORTCUT_ACTIONS: ReadonlyArray<ShortcutAction> = [
   {
     id: 'open_status',
     defaultCombo: 'mod+shift+o',
-    label: 'Open OpenCode status',
-    description: 'Open the OpenCode status dialog',
+    label: 'Open Codex status',
+    description: 'Open the Codex status dialog',
   },
   {
     id: 'open_settings',

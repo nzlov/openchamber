@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Part } from '@opencode-ai/sdk/v2';
+import type { Part } from '@/lib/codex/types';
 
 import {
   derivePartsLabel,
@@ -13,7 +13,7 @@ const part = (data: Record<string, unknown>): Part => data as unknown as Part;
 
 describe('truncateMessageId', () => {
   test('returns trailing 8 chars (suffix, not prefix)', () => {
-    // OpenCode ids share a long common prefix (msg_e39e98d…); the suffix is
+    // Codex ids share a long common prefix (msg_e39e98d…); the suffix is
     // the only distinguishing region, so we surface the tail.
     const id = 'msg_e39e98d86001xA2wMRcvRuL5HT';
     expect(truncateMessageId(id)).toBe(id.slice(-8));

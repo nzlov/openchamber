@@ -43,7 +43,7 @@ import { useI18n } from '@/lib/i18n';
 import { Icon } from "@/components/icon/Icon";
 import type { IconName } from "@/components/icon/icons";
 import { McpIcon } from '@/components/icons/McpIcon';
-import { reloadOpenCodeConfiguration } from '@/stores/useAgentsStore';
+import { reloadRuntimeConfiguration } from '@/stores/useAgentsStore';
 import {
   SETTINGS_PAGE_METADATA,
   getSettingsPageMeta,
@@ -594,7 +594,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
     if (result.id.startsWith('skills.')) {
       const store = useSkillsStore.getState();
       const name = nextUniqueName('new-skill', store.skills.map((skill) => skill.name));
-      store.setSkillDraft({ name, scope: 'user', source: 'opencode', description: '', instructions: '' });
+      store.setSkillDraft({ name, scope: 'user', source: 'codex', description: '', instructions: '' });
       store.setSelectedSkill(name);
       return result.id === 'skills.create' ? 'skills.basic-information' : result.id;
     }
@@ -1057,14 +1057,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
                       'text-sm font-semibold text-sidebar-foreground/90',
                       'hover:text-sidebar-foreground hover:bg-interactive-hover',
                     )}
-                    onClick={() => void reloadOpenCodeConfiguration({ message: 'Restarting OpenCode…', mode: 'projects', scopes: ['all'] }).catch(() => undefined)}
+                    onClick={() => void reloadRuntimeConfiguration({ message: 'Restarting runtime…', mode: 'projects', scopes: ['all'] }).catch(() => undefined)}
                   >
                     <Icon name="restart" className="h-4 w-4 shrink-0" />
-                    <span>{t('settings.view.actions.reloadOpenCode')}</span>
+                    <span>{t('settings.view.actions.reloadRuntime')}</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {t('settings.view.actions.reloadOpenCodeTooltip')}
+                  {t('settings.view.actions.reloadRuntimeTooltip')}
                 </TooltipContent>
               </Tooltip>
             )}

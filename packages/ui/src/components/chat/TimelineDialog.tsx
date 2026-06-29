@@ -11,7 +11,7 @@ import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useSessionMessageRecords } from '@/sync/sync-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from "@/components/icon/Icon";
-import type { Part } from '@opencode-ai/sdk/v2';
+import type { Part } from '@/lib/codex/types';
 import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
 import { useDeviceInfo } from '@/lib/device';
 import { cn } from '@/lib/utils';

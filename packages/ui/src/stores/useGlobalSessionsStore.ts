@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { OpencodeClient, Session } from '@opencode-ai/sdk/v2';
-import { opencodeClient } from '@/lib/opencode/client';
+import type { CodexRuntimeSdkClient, Session } from '@/lib/codex/types';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { listGlobalSessionPages } from '@/stores/globalSessions';
 import { getReviewTransferDirection, type ReviewTransferDirection } from '@/lib/reviewFlow';
 import { getOriginalSessionID, getReviewSessionID } from '@/lib/sessionReviewMetadata';
@@ -56,7 +56,7 @@ export const resolveGlobalSessionDirectory = (session: Session): string | null =
     ?? normalizePath(record.project?.worktree ?? null);
 };
 
-export const mergeSessionDirectoryMetadata = (incoming: Session, existing?: Session | null): Session => {
+const mergeSessionDirectoryMetadata = (incoming: Session, existing?: Session | null): Session => {
   if (!existing) {
     return incoming;
   }
@@ -215,7 +215,7 @@ type DirectoryPageResult = {
 };
 
 const fetchDirectoryPages = async (
-  sdk: OpencodeClient,
+  sdk: CodexRuntimeSdkClient,
   directories: Set<string>,
   archived: boolean,
 ): Promise<DirectoryPageResult> => {
@@ -374,7 +374,7 @@ export const useGlobalSessionsStore = create<GlobalSessionsState>((set, get) => 
       const current = get();
 
       try {
-        const sdk = opencodeClient.getSdkClient();
+        const sdk = codexRuntimeClient.getSdkClient();
         const [activeResult, archivedResult] = await Promise.allSettled([
           listGlobalSessionPages(sdk, { archived: false, pageSize: PAGE_SIZE }),
           listGlobalSessionPages(sdk, { archived: true, pageSize: PAGE_SIZE }),
@@ -418,7 +418,7 @@ export const useGlobalSessionsStore = create<GlobalSessionsState>((set, get) => 
       return { activeSessions: state.activeSessions, archivedSessions: state.archivedSessions };
     }
 
-    const sdk = opencodeClient.getSdkClient();
+    const sdk = codexRuntimeClient.getSdkClient();
     const [active, archived] = await Promise.all([
       fetchDirectoryPages(sdk, directorySet, false),
       fetchDirectoryPages(sdk, directorySet, true),

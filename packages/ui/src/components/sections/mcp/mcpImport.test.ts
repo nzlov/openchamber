@@ -3,9 +3,9 @@ import { describe, expect, test } from 'bun:test';
 import { parseImportedMcpSnippet } from './mcpImport';
 
 describe('parseImportedMcpSnippet', () => {
-  test('imports OpenCode mcp wrapper config', () => {
+  test('imports Codex mcp wrapper config', () => {
     const result = parseImportedMcpSnippet(JSON.stringify({
-      $schema: 'https://opencode.ai/config.json',
+      $schema: 'https://openai.com/codex/config.json',
       mcp: {
         stitch: {
           type: 'remote',
@@ -44,7 +44,7 @@ describe('parseImportedMcpSnippet', () => {
     expect(result.command).toEqual(['node', 'server.js', '--stdio']);
   });
 
-  test('rejects multiple OpenCode mcp wrapper entries', () => {
+  test('rejects multiple Codex mcp wrapper entries', () => {
     const result = parseImportedMcpSnippet(JSON.stringify({
       mcp: {
         one: { type: 'remote', url: 'https://one.example/mcp' },

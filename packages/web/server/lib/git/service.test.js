@@ -351,7 +351,7 @@ describe('createWorktree', () => {
         returnAfterDirectoryCreated: true,
       })).rejects.toThrow(`Branch is already checked out in ${canonicalWorktree}`);
 
-      const candidateDirectory = path.join(dataHome, 'opencode', 'worktree', projectID, 'feature-in-use');
+      const candidateDirectory = path.join(dataHome, 'codex', 'worktree', projectID, 'feature-in-use');
       expect(fs.existsSync(candidateDirectory)).toBe(false);
     } finally {
       if (previousXdgDataHome === undefined) {

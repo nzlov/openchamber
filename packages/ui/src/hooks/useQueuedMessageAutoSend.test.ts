@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { Agent } from '@opencode-ai/sdk/v2';
+import type { Agent } from '@/lib/codex/types';
 import type { QueuedMessage } from '../stores/messageQueueStore';
 
 let visibleAgents: Agent[] = [];

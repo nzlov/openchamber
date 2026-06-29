@@ -1,6 +1,5 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import * as gitService from './gitService';
 import type { BridgeContext, BridgeResponse } from './bridge';
 
@@ -66,9 +65,73 @@ const assertBridgeSdkSuccess = (result: BridgeSdkResult<unknown>, operation: str
   }
 };
 
-const createBridgeGitClient = (apiUrl: string, authHeaders?: Record<string, string>) => createOpencodeClient({
-  baseUrl: apiUrl.replace(/\/+$/, ''),
-  headers: authHeaders || {},
+const requestBridgeJson = async <T,>(
+  apiUrl: string,
+  requestPath: string,
+  init: RequestInit = {},
+  authHeaders?: Record<string, string>,
+): Promise<BridgeSdkResult<T>> => {
+  const baseUrl = apiUrl.replace(/\/+$/, '');
+  const response = await fetch(`${baseUrl}${requestPath}`, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(authHeaders || {}),
+      ...(init.headers || {}),
+    },
+  });
+  const data = await response.json().catch(() => undefined) as T | undefined;
+  if (!response.ok) {
+    return { error: data ?? `HTTP ${response.status}`, response: { status: response.status } };
+  }
+  return { data, response: { status: response.status } };
+};
+
+const createBridgeGitClient = (apiUrl: string, authHeaders?: Record<string, string>) => ({
+  v2: {
+    model: {
+      list: (_params?: unknown, init?: RequestInit) =>
+        requestBridgeJson<unknown[]>(apiUrl, '/v2/model', init, authHeaders),
+    },
+  },
+  session: {
+    create: (params: Record<string, unknown>, init?: RequestInit) =>
+      requestBridgeJson<Record<string, unknown>>(apiUrl, '/session', {
+        ...init,
+        method: 'POST',
+        body: JSON.stringify(params),
+      }, authHeaders),
+    promptAsync: (params: { sessionID?: unknown; parts?: unknown; model?: unknown; directory?: unknown }, init?: RequestInit) => {
+      const sessionID = typeof params.sessionID === 'string' ? params.sessionID : '';
+      const query = typeof params.directory === 'string' && params.directory
+        ? `?directory=${encodeURIComponent(params.directory)}`
+        : '';
+      return requestBridgeJson<unknown>(apiUrl, `/session/${encodeURIComponent(sessionID)}/prompt_async${query}`, {
+        ...init,
+        method: 'POST',
+        body: JSON.stringify({
+          parts: params.parts,
+          model: params.model,
+        }),
+      }, authHeaders);
+    },
+    messages: (params: { sessionID?: unknown; directory?: unknown; limit?: unknown }, init?: RequestInit) => {
+      const sessionID = typeof params.sessionID === 'string' ? params.sessionID : '';
+      const search = new URLSearchParams();
+      if (typeof params.directory === 'string' && params.directory) search.set('directory', params.directory);
+      if (typeof params.limit === 'number') search.set('limit', String(params.limit));
+      const query = search.toString();
+      return requestBridgeJson<Array<Record<string, unknown>>>(apiUrl, `/session/${encodeURIComponent(sessionID)}/message${query ? `?${query}` : ''}`, init, authHeaders);
+    },
+    delete: (params: { sessionID?: unknown }, init?: RequestInit) => {
+      const sessionID = typeof params.sessionID === 'string' ? params.sessionID : '';
+      return requestBridgeJson<unknown>(apiUrl, `/session/${encodeURIComponent(sessionID)}`, {
+        ...init,
+        method: 'DELETE',
+      }, authHeaders);
+    },
+  },
 });
 
 const readStringField = (value: unknown, key: string): string => {
@@ -333,9 +396,9 @@ export async function handleSpecialGitBridgeMessage(
       const prompt = `You are drafting a GitHub Pull Request title + description. Respond in JSON of the shape {"title": string, "body": string} (ONLY JSON in response, no markdown fences) with these rules:\n- title: concise, sentence case, <= 80 chars, no trailing punctuation, no commit-style prefixes (no "feat:", "fix:")\n- body: GitHub-flavored markdown with these sections in this order: Summary, Testing, Notes\n- Summary: 3-6 bullet points describing user-visible changes; avoid internal helper function names\n- Testing: bullet list ("- Not tested" allowed)\n- Notes: bullet list; include breaking/rollout notes only when relevant\n\nContext:\n- base branch: ${base}\n- head branch: ${head}${context?.trim() ? `\n- Additional context: ${context.trim()}` : ''}\n\nDiff summary:\n${diffSummaries}`;
 
       try {
-        const apiUrl = ctx?.manager?.getApiUrl();
+        const apiUrl = ctx?.manager?.getRuntimeApiUrl();
         if (!apiUrl) {
-          return { id, type, success: false, error: 'OpenCode API unavailable' };
+          return { id, type, success: false, error: 'Codex API unavailable' };
         }
 
         const settings = deps.readSettings(ctx) as Record<string, unknown>;
@@ -343,7 +406,7 @@ export async function handleSpecialGitBridgeMessage(
           { providerId, modelId, zenModel: payloadZenModel },
           settings,
           apiUrl,
-          ctx?.manager?.getOpenCodeAuthHeaders()
+          ctx?.manager?.getRuntimeAuthHeaders()
         );
         const raw = await generateBridgeTextWithSessionFlow({
           apiUrl,
@@ -351,7 +414,7 @@ export async function handleSpecialGitBridgeMessage(
           prompt,
           providerID,
           modelID,
-          authHeaders: ctx?.manager?.getOpenCodeAuthHeaders(),
+          authHeaders: ctx?.manager?.getRuntimeAuthHeaders(),
         });
         if (!raw) {
           return { id, type, success: false, error: 'No PR description returned by generator' };

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import { ContextMenu } from '@base-ui/react/context-menu';
 import {
   DropdownMenu,
@@ -270,6 +270,7 @@ function SessionNodeItemComponent(props: Props): React.ReactNode {
     : 'group-hover:opacity-0 group-focus-within:opacity-0';
   const showOpenInEditorAction = isVSCode;
   const showQuickArchiveAction = !archivedBucket && !mobileVariant;
+  const supportsSessionSharing = false;
   const revealPaddingClass = isMinimalMode
     ? (isVSCode
         // VS Code minimal rows reveal up to three actions on hover
@@ -793,7 +794,7 @@ function SessionNodeItemComponent(props: Props): React.ReactNode {
         {isPinnedSession ? <Icon name="unpin" className="mr-1 h-4 w-4" /> : <Icon name="pushpin" className="mr-1 h-4 w-4" />}
         {isPinnedSession ? t('sessions.sidebar.session.menu.unpin') : t('sessions.sidebar.session.menu.pin')}
       </Item>
-      {!resolvedSession.share ? (
+      {supportsSessionSharing ? (!resolvedSession.share ? (
         <Item onClick={() => handleShareSession(resolvedSession)} className="[&>svg]:mr-1">
           <Icon name="share-2" className="mr-1 h-4 w-4" />
           {t('sessions.sidebar.session.menu.share')}
@@ -810,7 +811,7 @@ function SessionNodeItemComponent(props: Props): React.ReactNode {
             {t('sessions.sidebar.session.menu.unshare')}
           </Item>
         </>
-      )}
+      )) : null}
       <Item onClick={() => { void handleExportSession(); }} className="[&>svg]:mr-1">
         <Icon name="download" className="mr-1 h-4 w-4" />
         {t('sessions.sidebar.session.menu.exportMarkdown')}

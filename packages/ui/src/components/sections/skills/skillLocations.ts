@@ -1,6 +1,6 @@
 import type { SkillScope, SkillSource } from '@/stores/useSkillsStore';
 
-export type SkillLocationValue = 'user-opencode' | 'project-opencode' | 'user-claude' | 'project-claude' | 'user-agents' | 'project-agents';
+export type SkillLocationValue = 'user-codex' | 'project-codex' | 'user-claude' | 'project-claude' | 'user-agents' | 'project-agents';
 
 export const SKILL_LOCATION_OPTIONS: Array<{
   value: SkillLocationValue;
@@ -10,18 +10,18 @@ export const SKILL_LOCATION_OPTIONS: Array<{
   description: string;
 }> = [
   {
-    value: 'user-opencode',
+    value: 'user-codex',
     scope: 'user',
-    source: 'opencode',
-    label: 'User / OpenCode',
-    description: 'Global OpenCode config location',
+    source: 'codex',
+    label: 'User / Codex',
+    description: 'Global Codex config location',
   },
   {
-    value: 'project-opencode',
+    value: 'project-codex',
     scope: 'project',
-    source: 'opencode',
-    label: 'Project / OpenCode',
-    description: 'Current project .opencode location',
+    source: 'codex',
+    label: 'Project / Codex',
+    description: 'Current project .codex location',
   },
   {
     value: 'user-agents',
@@ -43,9 +43,9 @@ export function locationValueFrom(scope: SkillScope, source: SkillSource): Skill
   if (scope === 'project' && source === 'claude') return 'project-claude';
   if (scope === 'project' && source === 'agents') return 'project-agents';
   if (source === 'claude') return 'user-claude';
-  if (scope === 'project') return 'project-opencode';
+  if (scope === 'project') return 'project-codex';
   if (source === 'agents') return 'user-agents';
-  return 'user-opencode';
+  return 'user-codex';
 }
 
 export function locationPartsFrom(value: SkillLocationValue): { scope: SkillScope; source: SkillSource } {
@@ -53,7 +53,7 @@ export function locationPartsFrom(value: SkillLocationValue): { scope: SkillScop
   if (value === 'project-claude') return { scope: 'project', source: 'claude' };
   const match = SKILL_LOCATION_OPTIONS.find((option) => option.value === value);
   if (!match) {
-    return { scope: 'user', source: 'opencode' };
+    return { scope: 'user', source: 'codex' };
   }
   return { scope: match.scope, source: match.source };
 }

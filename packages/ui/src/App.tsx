@@ -12,6 +12,7 @@ import { useMenuActions } from '@/hooks/useMenuActions';
 import { useSessionStatusBootstrap } from '@/hooks/useSessionStatusBootstrap';
 import { useTraySync } from '@/hooks/useTraySync';
 import { useRouter } from '@/hooks/useRouter';
+import { parseRoute, hasRouteParams } from '@/lib/router';
 import { usePushVisibilityBeacon } from '@/hooks/usePushVisibilityBeacon';
 import { useWebNotificationStream } from '@/hooks/useWebNotificationStream';
 import { usePwaInstallPrompt } from '@/hooks/usePwaInstallPrompt';
@@ -33,7 +34,7 @@ import { useSessionUIStore } from '@/sync/session-ui-store';
 import { markSessionViewed } from '@/sync/notification-store';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { disposeTerminalInputTransport } from '@/lib/terminalApi';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getRuntimeKey, subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
@@ -59,7 +60,6 @@ import { applyMobileKeyboardMode } from '@/lib/mobileKeyboardMode';
 import { SyncAppEffects } from '@/apps/AppEffects';
 import { useAppFontEffects } from '@/apps/useAppFontEffects';
 import { resetStreamingState } from '@/sync/streaming';
-import { OpenCodeUpdateToast } from '@/components/update/OpenCodeUpdateToast';
 import { markStartupTrace, startupTraceEnabled } from '@/lib/startupTrace';
 
 // Lazy-loaded heavy views — loaded on demand to reduce initial bundle size.
@@ -198,7 +198,6 @@ const EmbeddedSessionChatContent: React.FC<{
   return (
     <>
       <SyncAppEffects embeddedBackgroundWorkEnabled={embeddedBackgroundWorkEnabled} />
-      <OpenCodeUpdateToast />
       <ChatView readOnly={embeddedSessionChat.readOnly} />
       <Toaster />
     </>
@@ -274,7 +273,7 @@ function App({ apis }: AppProps) {
         useAutoReviewStore.getState().stopRunningRunsForRuntime(detail.previousRuntimeKey);
       }
       disposeTerminalInputTransport();
-      opencodeClient.reconnectToRuntimeBaseUrl();
+      codexRuntimeClient.reconnectToRuntimeBaseUrl();
       useConfigStore.setState({
         providers: [],
         agents: [],
@@ -284,7 +283,12 @@ function App({ apis }: AppProps) {
         lastDisconnectReason: null,
       });
       useProjectsStore.getState().resetForRuntimeSwitch();
-      useSessionUIStore.getState().restoreForRuntimeSwitch(detail.runtimeKey);
+      const route = hasRouteParams() ? parseRoute() : null;
+      if (route?.sessionId) {
+        void useSessionUIStore.getState().setCurrentSession(route.sessionId, route.directory);
+      } else {
+        useSessionUIStore.getState().restoreForRuntimeSwitch(detail.runtimeKey);
+      }
       useUIStore.getState().restoreForRuntimeSwitch(detail.runtimeKey);
       resetStreamingState();
       setRuntimeEndpointEpoch((epoch) => epoch + 1);
@@ -422,7 +426,7 @@ function App({ apis }: AppProps) {
   }, [setPlanModeEnabled]);
 
   React.useEffect(() => {
-    // VS Code runtime bootstraps config + sessions after the managed OpenCode instance reports "connected".
+    // VS Code runtime bootstraps config + sessions after the managed Codex instance reports "connected".
     // Doing the default initialization here can race with startup and lead to one-shot failures.
     if (isVSCodeRuntime) {
       return;
@@ -534,7 +538,7 @@ function App({ apis }: AppProps) {
     if (!isConnected) {
       return;
     }
-    opencodeClient.setDirectory(currentDirectory);
+    codexRuntimeClient.setDirectory(currentDirectory);
 
     // Session loading is handled by the sync system's bootstrap — no manual loadSessions needed.
   }, [currentDirectory, isSwitchingDirectory, isConnected, isVSCodeRuntime]);
@@ -910,7 +914,7 @@ function App({ apis }: AppProps) {
   if (embeddedSessionChat) {
     return (
       <ErrorBoundary>
-        <SyncProvider key={runtimeEndpointEpoch} sdk={opencodeClient.getSdkClient()} directory={currentDirectory || ''}>
+        <SyncProvider key={runtimeEndpointEpoch} sdk={codexRuntimeClient.getSdkClient()} directory={currentDirectory || ''}>
           <RuntimeAPIProvider apis={apis}>
             <TooltipProvider delayDuration={300} skipDelayDuration={150}>
               <div className="h-full text-foreground bg-background">
@@ -953,14 +957,13 @@ function App({ apis }: AppProps) {
 
   return (
     <ErrorBoundary>
-      <SyncProvider key={runtimeEndpointEpoch} sdk={opencodeClient.getSdkClient()} directory={currentDirectory || ''}>
+      <SyncProvider key={runtimeEndpointEpoch} sdk={codexRuntimeClient.getSdkClient()} directory={currentDirectory || ''}>
         <RuntimeAPIProvider apis={apis}>
           <FireworksProvider>
             <VoiceProvider>
               <TooltipProvider delayDuration={300} skipDelayDuration={150}>
                 <div className={isDesktopRuntime ? 'h-full text-foreground bg-transparent' : 'h-full text-foreground bg-background'}>
                   <SyncAppEffects embeddedBackgroundWorkEnabled={embeddedBackgroundWorkEnabled} />
-                  <OpenCodeUpdateToast />
                   <MainLayout />
                   <Toaster />
                   {!isBootShell && (

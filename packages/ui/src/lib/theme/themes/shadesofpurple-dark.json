@@ -2,13 +2,13 @@
   "metadata": {
     "id": "shadesofpurple-dark",
     "name": "Shades of Purple",
-    "description": "Ported from OpenCode Shades of Purple theme (dark variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex Shades of Purple theme (dark variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "dark",
     "tags": [
       "dark",
-      "opencode",
+      "codex",
       "ported",
       "shadesofpurple"
     ]

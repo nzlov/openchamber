@@ -1,6 +1,6 @@
 ---
 title: Zmienne środowiskowe
-description: Skonfiguruj integrację OpenChamber i OpenCode za pomocą zmiennych środowiskowych.
+description: Skonfiguruj integrację OpenChamber i Codex za pomocą zmiennych środowiskowych.
 ---
 
 # Zmienne środowiskowe
@@ -45,49 +45,41 @@ Nadpisuje endpoint sprawdzania aktualizacji. Większość użytkowników nie pow
 
 Wymusza package manager używany do aktualizacji, gdy automatyczne wykrywanie się pomyli.
 
-## Serwer OpenCode
+## Serwer Codex
 
-### `OPENCODE_HOST`
+### `CODEX_HOME`
 
-Łączy OpenChamber z istniejącym OpenCode server. Wartość musi być origin `http` albo `https` z jawnym portem i bez path, query ani hash. `OPENCODE_HOST` ma pierwszeństwo przed `OPENCODE_PORT`.
+Path to the Codex home directory. OpenChamber uses `~/.codex` when this is not set.
 
-### `OPENCODE_PORT`
+### `OPENCHAMBER_CODEX_BINARY`
 
-Ustawia port OpenCode server. Dla managed OpenCode prosi o ten port; z `OPENCODE_SKIP_START=true` łączy się z zewnętrznym serwerem na tym porcie.
+Path to the `codex` executable OpenChamber should run. This takes precedence over `CODEX_BINARY`.
 
-### `OPENCODE_SKIP_START`
+### `CODEX_BINARY`
 
-Gdy ma wartość `true`, blokuje uruchamianie własnego OpenCode server przez OpenChamber.
+Ścieżka do executable `codex`, którego ma używać OpenChamber.
 
-### `OPENCHAMBER_OPENCODE_HOSTNAME`
+### `CODEX_CONFIG`
 
-Hostname dla OpenCode server zarządzanego przez OpenChamber. Domyślnie `127.0.0.1`.
+Ścieżka do konkretnego pliku config Codex.
 
-### `OPENCODE_BINARY`
+### `CODEX_CONFIG_DIR`
 
-Ścieżka do executable `opencode`, którego ma używać OpenChamber.
+Ścieżka do katalogu config Codex dla agents, skills, snippets i config discovery.
 
-### `OPENCODE_CONFIG`
+### `CODEX_DATA_DIR`
 
-Ścieżka do konkretnego pliku config OpenCode.
+Własny katalog danych dla managed Codex runtime.
 
-### `OPENCODE_CONFIG_DIR`
+### `CODEX_WSL_DISTRO`
 
-Ścieżka do katalogu config OpenCode dla agents, skills, snippets i config discovery.
+Wybiera WSL distro używane do integracji Codex w Windows.
 
-### `OPENCODE_DATA_DIR`
+### `OPENCHAMBER_CODEX_WSL_DISTRO`
 
-Własny katalog danych dla managed OpenCode server.
+Alias specyficzny dla OpenChamber do wyboru WSL distro. `CODEX_WSL_DISTRO` ma pierwszeństwo, gdy ustawione są obie zmienne.
 
-### `OPENCODE_WSL_DISTRO`
-
-Wybiera WSL distro używane do integracji OpenCode w Windows.
-
-### `OPENCHAMBER_OPENCODE_WSL_DISTRO`
-
-Alias specyficzny dla OpenChamber do wyboru WSL distro. `OPENCODE_WSL_DISTRO` ma pierwszeństwo, gdy ustawione są obie zmienne.
-
-### `OPENCODE_JWT_SECRET`
+### `CODEX_JWT_SECRET`
 
 Secret używany do podpisywania UI auth tokens. Dla trwałych usług użyj długiej losowej wartości.
 
@@ -133,6 +125,6 @@ Bun executable, którego OpenChamber ma używać do uruchamiania daemon processe
 
 Katalog główny instalacji Bun. OpenChamber używa go, aby znaleźć `bin/bun` dla daemon startup i aktualizacji.
 
-### `VITE_OPENCODE_URL`
+### `VITE_CODEX_URL`
 
 Build-time API base URL dla Vite-built web app. Przy normalnym użyciu CLI lub desktop większość użytkowników nie powinna tego ustawiać.

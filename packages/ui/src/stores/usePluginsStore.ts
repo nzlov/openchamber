@@ -5,9 +5,9 @@ import {
   startConfigUpdate,
   finishConfigUpdate,
 } from '@/lib/configUpdate';
-import { refreshAfterOpenCodeRestart } from '@/stores/useAgentsStore';
+import { refreshAfterRuntimeRestart } from '@/stores/useAgentsStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
 export type PluginScope = 'user' | 'project';
@@ -112,7 +112,7 @@ const getConfigDirectory = (): string | null => {
       return activeProject.path.trim();
     }
 
-    const clientDir = opencodeClient.getDirectory();
+    const clientDir = codexRuntimeClient.getDirectory();
     if (clientDir?.trim()) {
       return clientDir.trim();
     }
@@ -403,13 +403,13 @@ function chunkSpecs(specs: string[]): string[][] {
 }
 
 function buildDirectoryHeaders(directory: string | null): HeadersInit | undefined {
-  return directory ? { 'x-opencode-directory': directory } : undefined;
+  return directory ? { 'x-codex-directory': directory } : undefined;
 }
 
 function buildJsonHeaders(directory: string | null): HeadersInit {
   return {
     'Content-Type': 'application/json',
-    ...(directory ? { 'x-opencode-directory': directory } : {}),
+    ...(directory ? { 'x-codex-directory': directory } : {}),
   };
 }
 
@@ -441,7 +441,7 @@ async function runPluginMutation(
 
     if (payload?.requiresReload) {
       requiresReload = true;
-      await refreshAfterOpenCodeRestart({
+      await refreshAfterRuntimeRestart({
         message: payload.message,
         delayMs: payload.reloadDelayMs ?? CLIENT_RELOAD_DELAY_MS,
         scopes: ['all'],

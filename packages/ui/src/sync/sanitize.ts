@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Payload sanitization — strip oversized diff snapshot fields client-side.
 //
-// OpenCode session/message snapshots may carry large full-content diff fields
+// Codex session/message snapshots may carry large full-content diff fields
 // (legacy before/after or from/to). Revert snapshots and diff text can also
 // carry large file snapshots. The UI derives reverted-state behavior from the
 // lightweight messageID/partID markers, so these blob fields are intentionally
@@ -14,7 +14,7 @@
 //    detail-only revert/diff blobs
 // ---------------------------------------------------------------------------
 
-import type { Session, Message } from "@opencode-ai/sdk/v2/client"
+import type { Session, Message } from "@/lib/codex/types"
 
 type DiffEntry = {
   file?: string

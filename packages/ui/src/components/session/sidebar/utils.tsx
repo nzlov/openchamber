@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import { getCurrentIntlLocale } from '@/lib/i18n';
 import { formatMessage, useI18nStore } from '@/lib/i18n/store';
 
@@ -97,7 +97,7 @@ export const isPathWithinProject = (directory?: string | null, projectPath?: str
 export const normalizeForBranchComparison = (value: string): string => {
   return value
     .toLowerCase()
-    .replace(/^opencode[/-]?/i, '')
+    .replace(/^codex[/-]?/i, '')
     .replace(/[-_]/g, '')
     .trim();
 };

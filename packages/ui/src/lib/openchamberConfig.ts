@@ -119,7 +119,7 @@ const getLegacyConfigPath = (projectDirectory: string): string => {
 };
 
 const getBaseUrl = (): string => {
-  const defaultBaseUrl = import.meta.env.VITE_OPENCODE_URL || '/api';
+  const defaultBaseUrl = import.meta.env.VITE_OPENCHAMBER_API_URL || '/api';
   if (defaultBaseUrl.startsWith('/')) {
     return defaultBaseUrl;
   }

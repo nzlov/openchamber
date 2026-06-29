@@ -2,13 +2,13 @@
   "metadata": {
     "id": "cursor-dark",
     "name": "Cursor",
-    "description": "Ported from OpenCode Cursor theme (dark variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex Cursor theme (dark variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "dark",
     "tags": [
       "dark",
-      "opencode",
+      "codex",
       "ported",
       "cursor"
     ]

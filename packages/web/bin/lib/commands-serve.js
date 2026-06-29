@@ -26,7 +26,7 @@ const DAEMON_READY_TIMEOUT_MS = 30000;
 function createServeCommand({
   serverPath,
   bunBin,
-  checkOpenCodeCLI,
+  checkCodexCLI,
   getPreferredServerRuntime,
   setForegroundServerActive,
   setForegroundShutdown,
@@ -100,7 +100,7 @@ async function serveCommand(options) {
       }
     }
 
-    const opencodeBinary = await checkOpenCodeCLI(emitNotice);
+    const codexBinary = await checkCodexCLI(emitNotice);
     const preferredRuntime = getPreferredServerRuntime();
     const runtimeBin = preferredRuntime === 'bun' ? bunBin : process.execPath;
 
@@ -149,8 +149,8 @@ async function serveCommand(options) {
       }
 
       // Propagate resolved values into env before importing the server module.
-      if (opencodeBinary) {
-        process.env.OPENCODE_BINARY = opencodeBinary;
+      if (codexBinary) {
+        process.env.OPENCHAMBER_CODEX_BINARY = codexBinary;
       }
       if (effectiveUiPassword) {
         process.env.OPENCHAMBER_UI_PASSWORD = effectiveUiPassword;
@@ -271,11 +271,10 @@ async function serveCommand(options) {
         ...process.env,
         OPENCHAMBER_PORT: String(targetPort),
         OPENCHAMBER_RUNTIME: 'web',
-        OPENCODE_BINARY: opencodeBinary,
+        OPENCHAMBER_CODEX_BINARY: codexBinary,
         OPENCHAMBER_HOST: effectiveHost,
         ...(effectiveUiPassword ? { OPENCHAMBER_UI_PASSWORD: effectiveUiPassword } : {}),
         ...(options.apiOnly === true ? { OPENCHAMBER_API_ONLY: 'true' } : {}),
-        ...(process.env.OPENCODE_SKIP_START ? { OPENCHAMBER_SKIP_OPENCODE_START: process.env.OPENCODE_SKIP_START } : {}),
       },
     });
 

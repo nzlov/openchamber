@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from "@/components/icon/Icon";
-import type { Session } from '@opencode-ai/sdk/v2';
+import type { Session } from '@/lib/codex/types';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useSessions } from '@/sync/sync-context';
@@ -405,7 +405,7 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
                       {worktree.label || worktree.branch || t('settings.openchamber.worktrees.list.detachedHead')}
                     </p>
                     <span className="typography-micro text-muted-foreground/60 px-1.5 py-[1px] rounded bg-sidebar-accent/40 flex-shrink-0 self-center leading-none">
-                      OpenCode
+                      Codex
                     </span>
                   </div>
                   <p className="typography-micro text-muted-foreground/60 truncate">

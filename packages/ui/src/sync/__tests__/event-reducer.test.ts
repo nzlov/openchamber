@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Event, Part, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/sdk/v2/client"
+import type { Event, Part, PermissionRequest, QuestionRequest, SessionStatus } from "@/lib/codex/types"
 import { applyDirectoryEvent } from "../event-reducer"
 import { INITIAL_STATE, type State } from "../types"
 
@@ -135,6 +135,37 @@ describe("applyDirectoryEvent", () => {
 
     expect(draft.part.msg_1.map((item) => item.id)).toEqual(["prt_1"])
     expect(result).toBe(true)
+  })
+
+  test("stores parts bundled with message updated snapshots", () => {
+    const draft = state()
+    const result = applyDirectoryEvent(draft, {
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg_1",
+          sessionID: "ses_1",
+          role: "assistant",
+          time: { created: 1, completed: 2 },
+          finish: "stop",
+        },
+        parts: [{
+          id: "msg_1-text",
+          messageID: "msg_1",
+          type: "text",
+          text: "I am Codex.",
+        }],
+      },
+    } as Event)
+
+    expect(result).toBe(true)
+    expect(draft.message.ses_1.map((item) => item.id)).toEqual(["msg_1"])
+    expect(draft.part.msg_1).toEqual([{
+      id: "msg_1-text",
+      messageID: "msg_1",
+      type: "text",
+      text: "I am Codex.",
+    }])
   })
 
   test("skips duplicate session status events", () => {

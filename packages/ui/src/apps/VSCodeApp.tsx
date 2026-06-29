@@ -11,7 +11,7 @@ import { VSCodeLayout } from '@/components/layout/VSCodeLayout';
 import { usePushVisibilityBeacon } from '@/hooks/usePushVisibilityBeacon';
 import { useRouter } from '@/hooks/useRouter';
 import { useWindowTitle } from '@/hooks/useWindowTitle';
-import { opencodeClient } from '@/lib/opencode/client';
+import { codexRuntimeClient } from '@/lib/codex/runtime-client';
 import type { RuntimeAPIs } from '@/lib/api/types';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { useFeatureFlagsStore } from '@/stores/useFeatureFlagsStore';
@@ -101,7 +101,7 @@ export function VSCodeApp({ apis }: VSCodeAppProps) {
   if (panelType === 'agentManager') {
     return (
       <ErrorBoundary>
-        <SyncProvider sdk={opencodeClient.getSdkClient()} directory={currentDirectory || ''}>
+        <SyncProvider sdk={codexRuntimeClient.getSdkClient()} directory={currentDirectory || ''}>
           <RuntimeAPIProvider apis={apis}>
             <TooltipProvider delayDuration={300} skipDelayDuration={150}>
               <div className="h-full text-foreground bg-background">
@@ -118,7 +118,7 @@ export function VSCodeApp({ apis }: VSCodeAppProps) {
 
   return (
     <ErrorBoundary>
-      <SyncProvider sdk={opencodeClient.getSdkClient()} directory={currentDirectory || ''}>
+      <SyncProvider sdk={codexRuntimeClient.getSdkClient()} directory={currentDirectory || ''}>
         <RuntimeAPIProvider apis={apis}>
           <FireworksProvider>
             <TooltipProvider delayDuration={300} skipDelayDuration={150}>

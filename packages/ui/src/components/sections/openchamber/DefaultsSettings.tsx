@@ -235,7 +235,7 @@ export const DefaultsSettings: React.FC = () => {
               {supportsVariants ? ` (${defaultVariant ?? t('settings.openchamber.defaults.option.defaultLowercase')})` : ''}
             </span>
           ) : (
-            <span className="text-foreground">{t('settings.openchamber.defaults.summaryOpenCodeDefault')}</span>
+            <span className="text-foreground">{t('settings.openchamber.defaults.summaryCodexDefault')}</span>
           )}
           {defaultAgent && (
             <>

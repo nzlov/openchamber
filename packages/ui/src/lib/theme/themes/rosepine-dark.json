@@ -2,13 +2,13 @@
   "metadata": {
     "id": "rosepine-dark",
     "name": "Rose Pine",
-    "description": "Ported from OpenCode Rose Pine theme (dark variant)",
-    "author": "OpenCode",
+    "description": "Ported from Codex Rose Pine theme (dark variant)",
+    "author": "Codex",
     "version": "1.0.0",
     "variant": "dark",
     "tags": [
       "dark",
-      "opencode",
+      "codex",
       "ported",
       "rosepine"
     ]

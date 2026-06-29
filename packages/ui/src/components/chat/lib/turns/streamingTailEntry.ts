@@ -1,4 +1,4 @@
-import type { Part } from '@opencode-ai/sdk/v2';
+import type { Part } from '@/lib/codex/types';
 
 import { getNormalizedMessageForDisplay } from '../messageDisplayNormalization';
 import { projectTurnRecords } from './projectTurnRecords';

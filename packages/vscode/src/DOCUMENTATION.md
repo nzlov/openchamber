@@ -42,10 +42,9 @@ Keep `bridge.ts` as a thin orchestration layer that delegates message handling t
 
 - `bridge-config-runtime.ts`
   - Config and skills message handlers (`api:config/*`).
-  - Includes OpenCode resolution diagnostics parity handler used by shared UI (`/api/config/opencode-resolution`).
 
 - `bridge-settings-runtime.ts`
-  - Settings read/write and OpenCode skills discovery via API for bridge consumers.
+  - Settings read/write and skills discovery via API for bridge consumers.
 
 - `bridge-system-runtime.ts`
   - System/editor/provider/quota/notification/update-check message handlers.

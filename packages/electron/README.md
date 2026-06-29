@@ -85,7 +85,7 @@ The package supports macOS and Windows desktop features. Some native discovery h
 | `OPENCHAMBER_RUNTIME=desktop` | Set by Electron before starting the web server |
 | `OPENCHAMBER_DESKTOP_NOTIFY=true` | Enables desktop notification flow in the web server |
 | `OPENCHAMBER_SKIP_API_COMPRESSION=true` | Defaulted by Desktop to reduce local CPU overhead |
-| `OPENCODE_HOST` / `OPENCODE_PORT` / `OPENCODE_SKIP_START` | Connect Desktop to an external OpenCode server instead of starting one locally |
+| `CODEX_HOME` / `CODEX_BINARY` / `OPENCHAMBER_CODEX_BINARY` | Select the Codex config directory or CLI binary used by the managed runtime |
 
 ## Native Features Owned Here
 
@@ -118,7 +118,7 @@ Development builds use a separate user data directory named `OpenChamber Dev`, s
 
 ## Things To Be Careful With
 
-- Keep desktop-specific code in this package. Do not move OpenCode feature backend logic into Electron.
+- Keep desktop-specific code in this package. Do not move Codex feature backend logic into Electron.
 - Use hidden Windows process launches for background helpers. Avoid visible console flashes.
 - Keep `@openchamber/web`, `bun-pty`, `node-pty`, and native modules external in `bundle-main.mjs`; bundling them can break Electron startup.
 - Rebuild native modules after dependency or Electron version changes.
