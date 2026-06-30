@@ -78,6 +78,12 @@ function formatSdkError(error: unknown): string {
   }
 }
 
+export function isThreadNotLoadedSessionError(error: unknown): boolean {
+  const message = formatSdkError(error).toLowerCase()
+  return message.includes("thread/read failed")
+    && message.includes("thread not loaded")
+}
+
 function assertSdkSuccess<T>(result: SdkResult<T>, operation: string): void {
   if (!result.error) return
   const status = result.response?.status
@@ -492,7 +498,9 @@ export function useSync() {
                     }
                   }
                 } catch (e) {
-                  console.error("[sync] failed to fetch session", sessionID, e)
+                  if (!isThreadNotLoadedSessionError(e)) {
+                    console.error("[sync] failed to fetch session", sessionID, e)
+                  }
                 }
               })()
             : Promise.resolve(),
