@@ -6,6 +6,7 @@ import { ROUTE_PARAMS } from './types';
  */
 export interface AppRouteState {
   sessionId: string | null;
+  directory?: string | null;
   tab: MainTab;
   isSettingsOpen: boolean;
   settingsPath: string;
@@ -27,6 +28,9 @@ function serializeRoute(state: AppRouteState): URLSearchParams {
   // Session ID - always include if present
   if (state.sessionId && state.sessionId.trim().length > 0) {
     params.set(ROUTE_PARAMS.SESSION, state.sessionId);
+    if (state.directory && state.directory.trim().length > 0) {
+      params.set(ROUTE_PARAMS.DIRECTORY, state.directory.trim());
+    }
   }
 
   // Settings takes precedence - if open, include settings section

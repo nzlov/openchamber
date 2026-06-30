@@ -102,6 +102,7 @@ export function useRouter(): void {
 
     return {
       sessionId: sessionState.currentSessionId,
+      directory: sessionState.currentSessionDirectory,
       tab: uiState.activeMainTab,
       isSettingsOpen: uiState.isSettingsDialogOpen,
       settingsPath: uiState.settingsPage,

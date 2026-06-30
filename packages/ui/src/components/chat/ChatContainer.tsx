@@ -27,6 +27,7 @@ import { OverlayScrollbar } from '@/components/ui/OverlayScrollbar';
 import { Icon } from "@/components/icon/Icon";
 import { cn, formatDirectoryName } from '@/lib/utils';
 import { useProjectsStore } from '@/stores/useProjectsStore';
+import { hasRouteParams, parseRoute } from '@/lib/router';
 
 // New sync system imports
 import { useSessionUIStore } from '@/sync/session-ui-store';
@@ -352,6 +353,10 @@ type ChatContainerProps = {
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = true, readOnly = false }) => {
     const { t } = useI18n();
+    const pendingInitialRouteSessionRef = React.useRef<string | null | undefined>(undefined);
+    if (pendingInitialRouteSessionRef.current === undefined) {
+        pendingInitialRouteSessionRef.current = hasRouteParams() ? parseRoute().sessionId : null;
+    }
     // Session UI state
     const currentSessionId = useSessionUIStore((s) => s.currentSessionId);
     const currentSessionDirectory = useSessionUIStore((s) => s.currentSessionDirectory);
@@ -551,8 +556,18 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
         </Button>
     ) : null;
     const promptReadOnly = readOnly || Boolean(parentSession);
+    const pendingInitialRouteSession = pendingInitialRouteSessionRef.current;
 
     React.useEffect(() => {
+        if (pendingInitialRouteSession && currentSessionId === pendingInitialRouteSession) {
+            pendingInitialRouteSessionRef.current = null;
+        }
+    }, [currentSessionId, pendingInitialRouteSession]);
+
+    React.useEffect(() => {
+        if (pendingInitialRouteSessionRef.current) {
+            return;
+        }
         if (autoOpenDraft && !currentSessionId && !draftOpen) {
             openNewSessionDraft();
         }
@@ -754,7 +769,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
 		// so the empty state is only ever transient here — render a neutral
 		// background instead of flashing the logo / "start a new chat" on refresh.
 		// Keep the empty state when there's nothing to auto-open or an init error to show.
-		if (autoOpenDraft && !initError) {
+		if ((autoOpenDraft || pendingInitialRouteSessionRef.current) && !initError) {
 			return <div className="flex h-full flex-col bg-background" />;
 		}
 		return (

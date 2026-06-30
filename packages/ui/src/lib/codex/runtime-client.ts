@@ -54,6 +54,7 @@ type CodexTurn = Record<string, any>;
 type CodexThreadItem = Record<string, any>;
 type CompatMessageTime = { created: number; updated?: number; completed?: number };
 type CompatMessageOptions = { parentID?: string; status?: string; finish?: string };
+type CompatPartTime = { start?: number; end?: number };
 
 const normalizeFsPath = (value: string): string => value.replace(/\\/g, '/');
 
@@ -264,6 +265,10 @@ class CodexCompatClient {
   private readonly sdkProxy: CodexRuntimeSdkClient;
 
   private readonly activeTurns = new Map<string, string>();
+
+  private readonly turnItemOrders = new Map<string, Map<string, number>>();
+
+  private readonly nextTurnItemOrder = new Map<string, number>();
 
   private readonly pendingProviderOAuthLogins = new Map<string, string>();
 
@@ -914,6 +919,7 @@ class CodexCompatClient {
 
   private async resolveRollbackTurnCount(sessionId: string, messageId?: string): Promise<number> {
     if (!messageId) return 1;
+    const codexMessageId = this.toCodexItemId(messageId);
     const response = await codexClient.listThreadTurns(sessionId, {
       limit: 500,
       sortDirection: 'asc',
@@ -923,7 +929,7 @@ class CodexCompatClient {
     if (turns.length === 0) return 1;
     const turnIndex = turns.findIndex((turn) => {
       const items = Array.isArray(turn.items) ? turn.items : [];
-      return items.some((item) => item && typeof item === 'object' && (item as { id?: unknown }).id === messageId);
+      return items.some((item) => item && typeof item === 'object' && (item as { id?: unknown }).id === codexMessageId);
     });
     if (turnIndex < 0) {
       throw new Error('Cannot map the selected message to a Codex turn for rollback.');
@@ -1071,6 +1077,9 @@ class CodexCompatClient {
     if (method === 'turn/started' && typeof params.threadId === 'string') {
       if (typeof params.turn?.id === 'string') {
         this.activeTurns.set(params.threadId, params.turn.id);
+        const turnKey = this.toTurnKey(params.threadId, params.turn.id);
+        this.turnItemOrders.set(turnKey, new Map());
+        this.nextTurnItemOrder.set(turnKey, 0);
       }
       push(params.threadId, {
         type: 'session.status',
@@ -1095,7 +1104,11 @@ class CodexCompatClient {
     }
 
     if ((method === 'item/started' || method === 'item/completed') && typeof params.threadId === 'string' && params.item) {
-      const record = this.toMessageRecord(params.threadId, params.item);
+      const turnId = typeof params.turnId === 'string' ? params.turnId : this.activeTurns.get(params.threadId);
+      const messageId = turnId && typeof params.item.id === 'string'
+        ? this.toOrderedMessageId(params.threadId, turnId, this.getOrAssignTurnItemOrder(params.threadId, turnId, params.item.id), params.item.id)
+        : undefined;
+      const record = this.toMessageRecord(params.threadId, params.item, undefined, undefined, messageId);
       if (record) {
         push(params.threadId, {
           type: 'message.updated',
@@ -1109,12 +1122,32 @@ class CodexCompatClient {
       const itemId = typeof params.itemId === 'string' ? params.itemId : null;
       const delta = typeof params.delta === 'string' ? params.delta : '';
       if (itemId && delta) {
-        const messageId = this.toCompatMessageId(params.threadId, itemId);
+        const turnId = typeof params.turnId === 'string' ? params.turnId : this.activeTurns.get(params.threadId);
+        const messageId = this.toMessageIdForEvent(params.threadId, turnId, itemId);
         push(params.threadId, {
           type: 'message.part.delta',
           properties: {
             messageID: messageId,
             partID: `${messageId}-text`,
+            field: 'text',
+            delta,
+          },
+        } as Event);
+      }
+      return events;
+    }
+
+    if ((method === 'item/reasoning/textDelta' || method === 'item/reasoning/summaryTextDelta') && typeof params.threadId === 'string') {
+      const itemId = typeof params.itemId === 'string' ? params.itemId : null;
+      const delta = typeof params.delta === 'string' ? params.delta : '';
+      if (itemId && delta) {
+        const turnId = typeof params.turnId === 'string' ? params.turnId : this.activeTurns.get(params.threadId);
+        const messageId = this.toMessageIdForEvent(params.threadId, turnId, itemId);
+        push(params.threadId, {
+          type: 'message.part.delta',
+          properties: {
+            messageID: messageId,
+            partID: `${messageId}-reasoning`,
             field: 'text',
             delta,
           },
@@ -1162,12 +1195,17 @@ class CodexCompatClient {
     if (!turn || typeof turn !== 'object') return [];
     const items = Array.isArray(turn.items) ? turn.items : [];
     const records: CompatMessageRecord[] = [];
+    const turnId = typeof turn.id === 'string' ? turn.id : null;
     let parentUserMessageId: string | undefined;
-    for (const item of items) {
-      const record = this.toMessageRecord(sessionId, item, turn, item?.type === 'userMessage' ? undefined : parentUserMessageId);
+    for (const [index, item] of items.entries()) {
+      const itemId = typeof item?.id === 'string' ? item.id : null;
+      const messageId = turnId && itemId
+        ? this.toOrderedMessageId(sessionId, turnId, index, itemId)
+        : undefined;
+      const record = this.toMessageRecord(sessionId, item, turn, item?.type === 'userMessage' ? undefined : parentUserMessageId, messageId);
       if (record) records.push(record);
-      if (item?.type === 'userMessage' && typeof item.id === 'string') {
-        parentUserMessageId = item.id;
+      if (item?.type === 'userMessage' && itemId) {
+        parentUserMessageId = messageId ?? this.toCompatMessageId(sessionId, itemId);
       }
     }
     return records;
@@ -1175,6 +1213,40 @@ class CodexCompatClient {
 
   private toCompatMessageId(sessionId: string, itemId: string): string {
     return `${sessionId}:${itemId}`;
+  }
+
+  private toTurnKey(sessionId: string, turnId: string): string {
+    return `${sessionId}:${turnId}`;
+  }
+
+  private toOrderedMessageId(sessionId: string, turnId: string, itemIndex: number, itemId: string): string {
+    return `${sessionId}:${turnId}:${String(itemIndex).padStart(6, '0')}:${itemId}`;
+  }
+
+  private getOrAssignTurnItemOrder(sessionId: string, turnId: string, itemId: string): number {
+    const turnKey = this.toTurnKey(sessionId, turnId);
+    let orders = this.turnItemOrders.get(turnKey);
+    if (!orders) {
+      orders = new Map();
+      this.turnItemOrders.set(turnKey, orders);
+    }
+    const existing = orders.get(itemId);
+    if (typeof existing === 'number') return existing;
+    const next = this.nextTurnItemOrder.get(turnKey) ?? orders.size;
+    orders.set(itemId, next);
+    this.nextTurnItemOrder.set(turnKey, next + 1);
+    return next;
+  }
+
+  private toMessageIdForEvent(sessionId: string, turnId: string | undefined, itemId: string): string {
+    if (!turnId) return this.toCompatMessageId(sessionId, itemId);
+    const order = this.getOrAssignTurnItemOrder(sessionId, turnId, itemId);
+    return this.toOrderedMessageId(sessionId, turnId, order, itemId);
+  }
+
+  private toCodexItemId(messageId: string): string {
+    const parts = messageId.split(':');
+    return parts[parts.length - 1] || messageId;
   }
 
   private toMessageTime(item: CodexThreadItem, turn?: CodexTurn | null): CompatMessageTime {
@@ -1205,15 +1277,11 @@ class CodexCompatClient {
     };
   }
 
-  private toMessageRecord(sessionId: string, item: CodexThreadItem, turn?: CodexTurn | null, parentID?: string): CompatMessageRecord | null {
+  private toMessageRecord(sessionId: string, item: CodexThreadItem, turn?: CodexTurn | null, parentID?: string, messageIdOverride?: string): CompatMessageRecord | null {
     if (!item || typeof item !== 'object' || typeof item.id !== 'string') return null;
-    const messageId = this.toCompatMessageId(sessionId, item.id);
+    const messageId = messageIdOverride ?? this.toCompatMessageId(sessionId, item.id);
     const time = this.toMessageTime(item, turn);
-    const assistantOptions = this.toAssistantMessageOptions(
-      item,
-      turn,
-      parentID ? this.toCompatMessageId(sessionId, parentID) : undefined,
-    );
+    const assistantOptions = this.toAssistantMessageOptions(item, turn, parentID);
     if (item.type === 'userMessage') {
       return this.toUserMessageRecord(sessionId, messageId, Array.isArray(item.content) ? item.content : [], time);
     }
@@ -1230,25 +1298,137 @@ class CodexCompatClient {
       ].filter((value) => typeof value === 'string' && value.length > 0).join('\n');
       return {
         info: { id: messageId, sessionID: sessionId, role: 'assistant', time, ...assistantOptions },
-        parts: [{ id: `${messageId}-reasoning`, messageID: messageId, type: 'reasoning', text }],
+        parts: [{ id: `${messageId}-reasoning`, messageID: messageId, type: 'reasoning', text, time: this.toPartTime(item, turn) }],
       };
     }
     return {
       info: { id: messageId, sessionID: sessionId, role: 'assistant', time, ...assistantOptions },
-      parts: [{
-        id: `${messageId}-tool`,
-        messageID: messageId,
-        type: 'tool',
-        tool: item.tool ?? item.type,
-        callID: item.id,
-        state: {
-          status: item.status,
-          input: item.arguments ?? item.command ?? item.changes,
-          output: item.result ?? item.aggregatedOutput ?? item.error ?? item.contentItems,
-          metadata: item,
-        },
-      }],
+      parts: [this.toToolPart(messageId, item, turn)],
     };
+  }
+
+  private toPartTime(item: CodexThreadItem, turn?: CodexTurn | null): CompatPartTime {
+    const start = firstTimestamp(
+      item.startedAt,
+      item.startedAtMs,
+      item.createdAt,
+      turn?.startedAt,
+    );
+    let end = firstTimestamp(
+      item.completedAt,
+      item.completedAtMs,
+      turn?.completedAt,
+    );
+    const rawStatus = typeof item.status === 'string' ? item.status : '';
+    const statusLooksFinal = rawStatus === 'completed'
+      || rawStatus === 'failed'
+      || rawStatus === 'declined'
+      || rawStatus === 'cancelled'
+      || rawStatus === 'canceled'
+      || rawStatus === 'error'
+      || rawStatus === 'errored'
+      || turn?.status === 'completed'
+      || turn?.status === 'failed';
+    if (end === undefined && statusLooksFinal) {
+      end = Date.now();
+    }
+    return {
+      ...(start !== undefined ? { start } : {}),
+      ...(end !== undefined ? { end } : {}),
+    };
+  }
+
+  private toToolPart(messageId: string, item: CodexThreadItem, turn?: CodexTurn | null): Part {
+    const time = this.toPartTime(item, turn);
+    return {
+      id: `${messageId}-tool`,
+      messageID: messageId,
+      type: 'tool',
+      tool: this.toToolName(item),
+      callID: item.id,
+      state: {
+        status: this.toToolStatus(item, turn, time),
+        input: this.toToolInput(item),
+        output: this.toToolOutput(item),
+        time,
+        metadata: this.toToolMetadata(item),
+      },
+    };
+  }
+
+  private toToolName(item: CodexThreadItem): string {
+    if (item.type === 'commandExecution') return 'bash';
+    if (item.type === 'fileChange') return 'apply_patch';
+    if (item.type === 'mcpToolCall') return typeof item.tool === 'string' ? item.tool : 'mcp';
+    if (item.type === 'dynamicToolCall') {
+      if (typeof item.namespace === 'string' && item.namespace) return `${item.namespace}.${item.tool ?? 'tool'}`;
+      return typeof item.tool === 'string' ? item.tool : 'tool';
+    }
+    if (item.type === 'webSearch') return 'web_search';
+    if (item.type === 'imageView') return 'view_image';
+    if (item.type === 'imageGeneration') return 'image_generation';
+    if (item.type === 'sleep') return 'sleep';
+    if (item.type === 'collabAgentToolCall') return typeof item.tool === 'string' ? item.tool : 'task';
+    return typeof item.tool === 'string' ? item.tool : String(item.type ?? 'tool');
+  }
+
+  private toToolStatus(item: CodexThreadItem, turn: CodexTurn | null | undefined, time: CompatPartTime): string {
+    const status = typeof item.status === 'string' ? item.status : '';
+    if (status === 'inProgress' || status === 'started' || status === 'running') return 'running';
+    if (status === 'pending') return 'pending';
+    if (status === 'completed' || status === 'success') return 'completed';
+    if (status === 'failed' || status === 'error' || status === 'errored') return 'failed';
+    if (status === 'declined' || status === 'cancelled' || status === 'canceled' || status === 'aborted') return 'cancelled';
+    if (turn?.status === 'completed' || typeof time.end === 'number') return 'completed';
+    return 'running';
+  }
+
+  private toToolInput(item: CodexThreadItem): unknown {
+    if (item.type === 'commandExecution') {
+      return {
+        command: item.command,
+        cwd: item.cwd,
+        source: item.source,
+        actions: item.commandActions,
+      };
+    }
+    if (item.type === 'fileChange') return { changes: item.changes };
+    if (item.type === 'mcpToolCall' || item.type === 'dynamicToolCall') return item.arguments;
+    if (item.type === 'webSearch') return { query: item.query };
+    if (item.type === 'sleep') return { durationMs: item.durationMs };
+    if (item.type === 'imageView') return { path: item.path };
+    if (item.type === 'imageGeneration') return { prompt: item.revisedPrompt };
+    return item.arguments ?? item.command ?? item.changes ?? item.prompt ?? item.query ?? undefined;
+  }
+
+  private toToolOutput(item: CodexThreadItem): unknown {
+    if (item.type === 'commandExecution') return item.aggregatedOutput;
+    if (item.type === 'fileChange' && Array.isArray(item.changes)) {
+      return item.changes.map((change: Record<string, unknown>) => {
+        const path = typeof change.path === 'string' ? change.path : '';
+        const kind = typeof change.kind === 'string' ? change.kind : 'changed';
+        const diff = typeof change.diff === 'string' ? change.diff : '';
+        return [path ? `${kind} ${path}` : kind, diff].filter(Boolean).join('\n');
+      }).join('\n\n');
+    }
+    if (item.error) return item.error;
+    if (item.result) return item.result;
+    if (item.contentItems) return item.contentItems;
+    if (item.action) return item.action;
+    if (item.savedPath) return item.savedPath;
+    return undefined;
+  }
+
+  private toToolMetadata(item: CodexThreadItem): Record<string, unknown> {
+    if (item.type === 'fileChange' && Array.isArray(item.changes)) {
+      return {
+        ...item,
+        files: item.changes
+          .map((change: Record<string, unknown>) => change.path)
+          .filter((path: unknown): path is string => typeof path === 'string' && path.length > 0),
+      };
+    }
+    return item;
   }
 
   private toAssistantMessageOptions(item: CodexThreadItem, turn?: CodexTurn | null, parentID?: string): CompatMessageOptions {

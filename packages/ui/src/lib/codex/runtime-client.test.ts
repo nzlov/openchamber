@@ -10,6 +10,7 @@ const compactCalls: string[] = [];
 const loginAccountCalls: Array<Record<string, unknown>> = [];
 const readThreadCalls: Array<{ threadId: string; query?: Record<string, unknown> }> = [];
 let listThreadTurnsError: Error | null = null;
+let listThreadTurnsResponse: Record<string, unknown> | null = null;
 
 mock.module('@/contexts/runtimeAPIRegistry', () => ({
   getRegisteredRuntimeAPIs: mock(() => null),
@@ -92,6 +93,7 @@ mock.module('@/lib/codex/client', () => ({
     }),
     listThreadTurns: mock(async () => {
       if (listThreadTurnsError) throw listThreadTurnsError;
+      if (listThreadTurnsResponse) return listThreadTurnsResponse;
       return {
         data: [{
           id: 'turn_1',
@@ -156,6 +158,7 @@ describe('Codex runtime client migration facade', () => {
     const sdk = codexRuntimeClient.getSdkClient();
     readThreadCalls.length = 0;
     listThreadTurnsError = null;
+    listThreadTurnsResponse = null;
 
     const sessions = await sdk.session.list({ directory: '/workspace/project' });
     expect(sessions.data?.[0]?.id).toBe('thread_1');
@@ -171,23 +174,196 @@ describe('Codex runtime client migration facade', () => {
 
     const messages = await sdk.session.messages({ sessionID: 'thread_1', limit: 20 });
     expect(messages.data?.map((record: { info: { role?: string } }) => record.info.role)).toEqual(['user', 'assistant']);
-    expect(messages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual(['thread_1:item_user', 'thread_1:item_agent']);
+    expect(messages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual(['thread_1:turn_1:000000:item_user', 'thread_1:turn_1:000001:item_agent']);
     expect(messages.data?.map((record: { info: { time?: { created?: number } } }) => record.info.time?.created)).toEqual([30_000, 30_000]);
-    expect(messages.data?.[1]?.info.parentID).toBe('thread_1:item_user');
+    expect(messages.data?.[1]?.info.parentID).toBe('thread_1:turn_1:000000:item_user');
     expect(messages.data?.[1]?.info.status).toBe('completed');
     expect(messages.data?.[1]?.info.finish).toBe('stop');
     expect(messages.data?.[1]?.info.time?.completed).toBe(40_000);
-    expect(messages.data?.[1]?.parts[0]?.messageID).toBe('thread_1:item_agent');
+    expect(messages.data?.[1]?.parts[0]?.messageID).toBe('thread_1:turn_1:000001:item_agent');
     expect(messages.data?.[1]?.parts[0]?.text).toBe('hi');
     expect(messages.response?.headers?.get('x-next-cursor')).toBe('cursor:turns:2');
 
     const otherMessages = await sdk.session.messages({ sessionID: 'thread_2', limit: 20 });
-    expect(otherMessages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual(['thread_2:item_user', 'thread_2:item_agent']);
-    expect(otherMessages.data?.[1]?.parts[0]?.messageID).toBe('thread_2:item_agent');
+    expect(otherMessages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual(['thread_2:turn_1:000000:item_user', 'thread_2:turn_1:000001:item_agent']);
+    expect(otherMessages.data?.[1]?.parts[0]?.messageID).toBe('thread_2:turn_1:000001:item_agent');
+  });
+
+  test('maps Codex tool and reasoning items into renderable message parts', async () => {
+    const sdk = codexRuntimeClient.getSdkClient();
+    listThreadTurnsError = null;
+    listThreadTurnsResponse = {
+      data: [{
+        id: 'turn_tools',
+        status: 'completed',
+        startedAt: 50,
+        completedAt: 60,
+        items: [
+          { type: 'userMessage', id: 'item_user_tools', content: [{ type: 'text', text: 'inspect', text_elements: [] }] },
+          { type: 'reasoning', id: 'item_reasoning', summary: ['checking files'], content: ['need command output'] },
+          {
+            type: 'commandExecution',
+            id: 'item_command',
+            command: 'pwd',
+            cwd: '/workspace/project',
+            processId: null,
+            source: 'agent',
+            status: 'completed',
+            commandActions: [],
+            aggregatedOutput: '/workspace/project',
+            exitCode: 0,
+            durationMs: 12,
+          },
+          {
+            type: 'fileChange',
+            id: 'item_patch',
+            changes: [{ path: '/workspace/project/a.ts', kind: 'update', diff: '--- a.ts\n+++ a.ts' }],
+            status: 'completed',
+          },
+          {
+            type: 'mcpToolCall',
+            id: 'item_mcp',
+            server: 'browser',
+            tool: 'open',
+            status: 'inProgress',
+            arguments: { url: 'https://example.test' },
+            appContext: null,
+            pluginId: null,
+            result: null,
+            error: null,
+            durationMs: null,
+          },
+          {
+            type: 'dynamicToolCall',
+            id: 'item_dynamic',
+            namespace: 'image_gen',
+            tool: 'imagegen',
+            arguments: { prompt: 'logo' },
+            status: 'failed',
+            contentItems: null,
+            success: false,
+            durationMs: 3,
+          },
+        ],
+      }],
+      nextCursor: null,
+    };
+
+    const messages = await sdk.session.messages({ sessionID: 'thread_1', limit: 20 });
+    expect(messages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual([
+      'thread_1:turn_tools:000000:item_user_tools',
+      'thread_1:turn_tools:000001:item_reasoning',
+      'thread_1:turn_tools:000002:item_command',
+      'thread_1:turn_tools:000003:item_patch',
+      'thread_1:turn_tools:000004:item_mcp',
+      'thread_1:turn_tools:000005:item_dynamic',
+    ]);
+
+    const reasoning = messages.data?.[1]?.parts[0];
+    expect(reasoning?.id).toBe('thread_1:turn_tools:000001:item_reasoning-reasoning');
+    expect(reasoning?.messageID).toBe('thread_1:turn_tools:000001:item_reasoning');
+    expect(reasoning?.type).toBe('reasoning');
+    expect(reasoning?.text).toBe('checking files\nneed command output');
+    expect(reasoning?.time).toEqual({ start: 50_000, end: 60_000 });
+
+    const command = messages.data?.[2]?.parts[0];
+    expect(command?.type).toBe('tool');
+    expect(command?.tool).toBe('bash');
+    expect(command?.callID).toBe('item_command');
+    expect(command?.state?.status).toBe('completed');
+    expect(command?.state?.input).toEqual({ command: 'pwd', cwd: '/workspace/project', source: 'agent', actions: [] });
+    expect(command?.state?.output).toBe('/workspace/project');
+    expect(command?.state?.time).toEqual({ start: 50_000, end: 60_000 });
+
+    const patch = messages.data?.[3]?.parts[0];
+    expect(patch?.tool).toBe('apply_patch');
+    expect(patch?.state?.status).toBe('completed');
+    expect(patch?.state?.time?.end).toBe(60_000);
+    expect(patch?.state?.metadata?.files).toEqual(['/workspace/project/a.ts']);
+
+    const mcp = messages.data?.[4]?.parts[0];
+    expect(mcp?.type).toBe('tool');
+    expect(mcp?.tool).toBe('open');
+    expect(mcp?.state?.status).toBe('running');
+    expect(mcp?.state?.input).toEqual({ url: 'https://example.test' });
+
+    const dynamic = messages.data?.[5]?.parts[0];
+    expect(dynamic?.type).toBe('tool');
+    expect(dynamic?.tool).toBe('image_gen.imagegen');
+    expect(dynamic?.state?.status).toBe('failed');
+    expect(dynamic?.state?.input).toEqual({ prompt: 'logo' });
+
+    listThreadTurnsResponse = null;
+  });
+
+  test('keeps Codex item message ids sortable in turn item order', async () => {
+    const sdk = codexRuntimeClient.getSdkClient();
+    listThreadTurnsError = null;
+    listThreadTurnsResponse = {
+      data: [{
+        id: 'turn_order',
+        status: 'completed',
+        startedAt: 70,
+        completedAt: 80,
+        items: [
+          { type: 'userMessage', id: 'item-1', content: [{ type: 'text', text: 'start', text_elements: [] }] },
+          { type: 'agentMessage', id: 'item-2', text: 'two', phase: 'commentary', memoryCitation: null },
+          { type: 'agentMessage', id: 'item-10', text: 'ten', phase: 'commentary', memoryCitation: null },
+          { type: 'fileChange', id: 'call_patch', changes: [], status: 'completed' },
+          { type: 'agentMessage', id: 'item-11', text: 'eleven', phase: 'final_answer', memoryCitation: null },
+        ],
+      }],
+      nextCursor: null,
+    };
+
+    const messages = await sdk.session.messages({ sessionID: 'thread_1', limit: 20 });
+    expect(messages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual([
+      'thread_1:turn_order:000000:item-1',
+      'thread_1:turn_order:000001:item-2',
+      'thread_1:turn_order:000002:item-10',
+      'thread_1:turn_order:000003:call_patch',
+      'thread_1:turn_order:000004:item-11',
+    ]);
+    expect(messages.data?.map((record: { parts?: Array<{ text?: string; tool?: string }> }) => record.parts?.[0]?.text ?? record.parts?.[0]?.tool)).toEqual([
+      'start',
+      'two',
+      'ten',
+      'apply_patch',
+      'eleven',
+    ]);
+
+    listThreadTurnsResponse = null;
+  });
+
+  test('maps Codex reasoning deltas onto reasoning text parts', () => {
+    const events = (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent({
+      method: 'item/reasoning/textDelta',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'item_reasoning',
+        delta: 'thinking...',
+        contentIndex: 0,
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toEqual({
+      type: 'message.part.delta',
+      properties: {
+        messageID: 'thread_1:turn_1:000000:item_reasoning',
+        partID: 'thread_1:turn_1:000000:item_reasoning-reasoning',
+        field: 'text',
+        delta: 'thinking...',
+      },
+    });
   });
 
   test('treats unmaterialized or empty Codex thread history as an empty message page', async () => {
     const sdk = codexRuntimeClient.getSdkClient();
+    listThreadTurnsResponse = null;
     listThreadTurnsError = new Error('thread/turns/list failed: failed to load thread history for thread thread_1: thread-store internal error: failed to read thread /home/user/.codex/sessions/rollout.jsonl: rollout at /home/user/.codex/sessions/rollout.jsonl is empty (-32603)');
 
     const messages = await sdk.session.messages({ sessionID: 'thread_1', limit: 20 });
@@ -249,14 +425,14 @@ describe('Codex runtime client migration facade', () => {
     forkCalls.length = 0;
     compactCalls.length = 0;
 
-    const reverted = await codexRuntimeClient.revertSession('thread_1', 'item_user', undefined, '/workspace/project');
+    const reverted = await codexRuntimeClient.revertSession('thread_1', 'thread_1:turn_1:000000:item_user', undefined, '/workspace/project');
     const forked = await codexRuntimeClient.forkSession('thread_1', 'item_user', '/workspace/project');
     await codexRuntimeClient.summarizeSession('thread_1');
 
     expect(rollbackCalls).toEqual([
       { threadId: 'thread_1', body: { numTurns: 1 } },
     ]);
-    expect(reverted.revert).toEqual({ messageID: 'item_user' });
+    expect(reverted.revert).toEqual({ messageID: 'thread_1:turn_1:000000:item_user' });
     expect(forkCalls).toEqual([
       { threadId: 'thread_1', body: { cwd: '/workspace/project', excludeTurns: true } },
     ]);
