@@ -162,6 +162,16 @@ const isCodexThreadNotFoundError = (error) => {
   return message.includes('thread not found');
 };
 
+const isCodexThreadNotLoadedError = (error) => {
+  const message = getErrorMessage(error);
+  return message.includes('thread not loaded');
+};
+
+const isCodexThreadMissingRolloutError = (error) => {
+  const message = getErrorMessage(error);
+  return message.includes('no rollout found for thread id');
+};
+
 const pickTurnResumeFields = (body) => {
   const resume = { threadId: body.threadId, excludeTurns: true };
   for (const field of [
@@ -389,10 +399,26 @@ export const registerCodexRoutes = (app, dependencies = {}) => {
   app.get('/api/codex/threads/:threadId', handleJson(async (req) => {
     const threadId = schemaRuntime.requireId(req.params?.threadId, 'thread id');
     const protocolRuntime = await getInitializedProtocolRuntime();
-    return protocolRuntime.readThread({
+    const readParams = {
       threadId,
       includeTurns: parseBooleanQuery(req.query?.includeTurns) !== false,
-    });
+    };
+    try {
+      return await protocolRuntime.readThread(readParams);
+    } catch (error) {
+      if (!isCodexThreadNotLoadedError(error)) {
+        throw error;
+      }
+      try {
+        await protocolRuntime.resumeThread({ threadId, excludeTurns: true });
+      } catch (resumeError) {
+        if (isCodexThreadMissingRolloutError(resumeError)) {
+          throw createHttpError(404, getErrorMessage(resumeError));
+        }
+        throw resumeError;
+      }
+      return protocolRuntime.readThread(readParams);
+    }
   }));
 
   app.patch('/api/codex/threads/:threadId', handleJson(async (req) => {
@@ -495,17 +521,29 @@ export const registerCodexRoutes = (app, dependencies = {}) => {
     const threadId = schemaRuntime.requireId(req.params?.threadId, 'thread id');
     const limit = parsePositiveInteger(req.query?.limit);
     const protocolRuntime = await getInitializedProtocolRuntime();
+    const listParams = {
+      threadId,
+      ...(typeof req.query?.cursor === 'string' && req.query.cursor ? { cursor: req.query.cursor } : {}),
+      ...(limit ? { limit } : {}),
+      ...(typeof req.query?.sortDirection === 'string' && req.query.sortDirection ? { sortDirection: req.query.sortDirection } : {}),
+      ...(typeof req.query?.itemsView === 'string' && req.query.itemsView ? { itemsView: req.query.itemsView } : {}),
+    };
     try {
-      return await protocolRuntime.listThreadTurns({
-        threadId,
-        ...(typeof req.query?.cursor === 'string' && req.query.cursor ? { cursor: req.query.cursor } : {}),
-        ...(limit ? { limit } : {}),
-        ...(typeof req.query?.sortDirection === 'string' && req.query.sortDirection ? { sortDirection: req.query.sortDirection } : {}),
-        ...(typeof req.query?.itemsView === 'string' && req.query.itemsView ? { itemsView: req.query.itemsView } : {}),
-      });
+      return await protocolRuntime.listThreadTurns(listParams);
     } catch (error) {
       if (isEmptyCodexThreadHistoryError(error)) {
         return { data: [], nextCursor: null, backwardsCursor: null };
+      }
+      if (isCodexThreadNotLoadedError(error)) {
+        try {
+          await protocolRuntime.resumeThread({ threadId, excludeTurns: true });
+        } catch (resumeError) {
+          if (isCodexThreadMissingRolloutError(resumeError)) {
+            return { data: [], nextCursor: null, backwardsCursor: null };
+          }
+          throw resumeError;
+        }
+        return protocolRuntime.listThreadTurns(listParams);
       }
       throw error;
     }

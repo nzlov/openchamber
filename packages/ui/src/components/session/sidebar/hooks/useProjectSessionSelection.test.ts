@@ -259,4 +259,52 @@ describe('useProjectSessionSelection — worktree session click race', () => {
     const guardWouldFire = Boolean(currentSessionId && projectMap);
     expect(guardWouldFire).toBe(false);
   });
+
+  test('initial route session blocks fallback until it appears in projectMap', () => {
+    const { metaByProject, firstSessionByProject } = computeProjectMeta(staleSections);
+    const projectMap = metaByProject.get('project-1')!;
+    const currentSessionId = 'route-session-1';
+    const pendingRouteSessionId = 'route-session-1';
+
+    expect(projectMap.has(currentSessionId)).toBe(false);
+    expect(firstSessionByProject.get('project-1')?.id).toBe('root-session-1');
+
+    const shouldReturnBeforeFallback =
+      pendingRouteSessionId === currentSessionId
+      && !projectMap.has(currentSessionId);
+
+    expect(shouldReturnBeforeFallback).toBe(true);
+  });
+
+  test('cleared initial route session releases fallback selection', () => {
+    const { metaByProject, firstSessionByProject } = computeProjectMeta(staleSections);
+    const projectMap = metaByProject.get('project-1')!;
+    let pendingRouteSessionId: string | null = 'route-session-1';
+    const currentSessionId = null;
+
+    if (pendingRouteSessionId && !currentSessionId) {
+      pendingRouteSessionId = null;
+    }
+
+    expect(pendingRouteSessionId).toBe(null);
+    expect(projectMap.size).toBeGreaterThan(0);
+    expect(firstSessionByProject.get('project-1')?.id).toBe('root-session-1');
+  });
+
+  test('initial route session clears once projectMap contains it before same-project early return', () => {
+    const { metaByProject } = computeProjectMeta(updatedSections);
+    const projectMap = metaByProject.get('project-1')!;
+    let pendingRouteSessionId: string | null = 'wt-session-1';
+    const currentSessionId = 'wt-session-1';
+    const projectChanged = false;
+    const currentSessionStillInProject = Boolean(currentSessionId && projectMap.has(currentSessionId));
+
+    if (pendingRouteSessionId === currentSessionId && projectMap.has(currentSessionId)) {
+      pendingRouteSessionId = null;
+    }
+    const wouldSameProjectReturn = !projectChanged && currentSessionStillInProject;
+
+    expect(wouldSameProjectReturn).toBe(true);
+    expect(pendingRouteSessionId).toBe(null);
+  });
 });

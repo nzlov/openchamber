@@ -170,6 +170,7 @@ export function routeMessage(params: {
 type SendMessageOptions = {
   sessionId?: string
   delivery?: 'steer'
+  draftFallback?: NewSessionDraftState
 }
 
 type AssistantMessageSessionExecution = {
@@ -1006,7 +1007,15 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       set({ pendingChangesBarDismissed: map });
     }
 
-    const draft = get().newSessionDraft
+    const currentDraft = get().newSessionDraft
+    const draft = currentDraft.open ? currentDraft : options?.draftFallback
+    if (!currentDraft.open && draft?.open) {
+      set({
+        newSessionDraft: { ...draft },
+        currentSessionId: null,
+        currentSessionDirectory: null,
+      })
+    }
     const trimmedAgent = typeof agent === "string" && agent.trim().length > 0 ? agent.trim() : undefined
 
     // ---- New session from draft ----

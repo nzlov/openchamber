@@ -100,24 +100,34 @@ export const useProjectSessionSelection = (args: Args): void => {
       return;
     }
 
-    if (previousActiveProjectRef.current === activeProjectId) {
-      return;
-    }
-
     const section = projectSections.find((item) => item.project.id === activeProjectId);
     if (!section) {
       return;
     }
-    previousActiveProjectRef.current = activeProjectId;
     const projectMap = projectSessionMeta.metaByProject.get(activeProjectId);
+    const projectChanged = previousActiveProjectRef.current !== activeProjectId;
+    const currentSessionStillInProject = Boolean(currentSessionId && projectMap?.has(currentSessionId));
 
     const pendingRouteSessionId = pendingInitialRouteSessionRef.current;
-    if (pendingRouteSessionId && pendingRouteSessionId !== currentSessionId) {
+    if (pendingRouteSessionId) {
+      if (!currentSessionId) {
+        pendingInitialRouteSessionRef.current = null;
+      } else if (pendingRouteSessionId !== currentSessionId) {
+        return;
+      } else if (!projectMap?.has(currentSessionId)) {
+        previousActiveProjectRef.current = activeProjectId;
+        return;
+      } else {
+        pendingInitialRouteSessionRef.current = null;
+      }
+    }
+    if (!projectChanged && currentSessionId && !projectMap) {
       return;
     }
-    if (pendingRouteSessionId && pendingRouteSessionId === currentSessionId) {
-      pendingInitialRouteSessionRef.current = null;
+    if (!projectChanged && (!currentSessionId || currentSessionStillInProject)) {
+      return;
     }
+    previousActiveProjectRef.current = activeProjectId;
 
     if (currentSessionId && projectMap && projectMap.has(currentSessionId)) {
       setActiveSessionByProject((prev) => {
@@ -128,15 +138,6 @@ export const useProjectSessionSelection = (args: Args): void => {
         next.set(activeProjectId, currentSessionId);
         return next;
       });
-      return;
-    }
-
-    // Path A' — currentSessionId is set but not in stale projectMap.
-    // Preserve user's explicit selection when the projectMap exists but
-    // is missing the session (worktree data not yet loaded). For
-    // empty projects (projectMap is undefined), fall through to Path B
-    // so a new session draft is opened.
-    if (currentSessionId && projectMap) {
       return;
     }
 

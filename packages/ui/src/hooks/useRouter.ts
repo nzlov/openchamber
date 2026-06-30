@@ -5,6 +5,7 @@ import { parseRoute, updateBrowserURL, hasRouteParams } from '@/lib/router';
 import type { RouteState, AppRouteState } from '@/lib/router';
 import type { MainTab } from '@/stores/useUIStore';
 import { resolveSettingsSlug } from '@/lib/settings/metadata';
+import { sessionEvents } from '@/lib/sessionEvents';
 
 /**
  * Check if running in VS Code webview context.
@@ -175,6 +176,16 @@ export function useRouter(): void {
 
     return unsubscribe;
   }, [isVSCode, syncURLFromState]);
+
+  React.useEffect(() => {
+    return sessionEvents.onSessionUnavailable(({ sessionId }) => {
+      const currentSessionId = useSessionUIStore.getState().currentSessionId;
+      if (currentSessionId !== sessionId) {
+        return;
+      }
+      void setCurrentSession(null);
+    });
+  }, [setCurrentSession]);
 
   // Subscribe to UI store changes (tab, settings)
   React.useEffect(() => {

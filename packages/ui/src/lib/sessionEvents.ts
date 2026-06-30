@@ -19,11 +19,14 @@ type CreateListener = (request: SessionCreateRequest) => void;
 type DirectoryListener = () => void;
 type GitRefreshHint = { directory: string };
 type GitRefreshListener = (hint: GitRefreshHint) => void;
+type SessionUnavailableHint = { sessionId: string; reason: 'missing-rollout' };
+type SessionUnavailableListener = (hint: SessionUnavailableHint) => void;
 
 const deleteListeners = new Set<DeleteListener>();
 const createListeners = new Set<CreateListener>();
 const directoryListeners = new Set<DirectoryListener>();
 const gitRefreshListeners = new Set<GitRefreshListener>();
+const sessionUnavailableListeners = new Set<SessionUnavailableListener>();
 
 export const sessionEvents = {
   onDeleteRequest(listener: DeleteListener) {
@@ -68,5 +71,17 @@ export const sessionEvents = {
       return;
     }
     gitRefreshListeners.forEach((listener) => listener(hint));
+  },
+  onSessionUnavailable(listener: SessionUnavailableListener) {
+    sessionUnavailableListeners.add(listener);
+    return () => {
+      sessionUnavailableListeners.delete(listener);
+    };
+  },
+  reportSessionUnavailable(hint: SessionUnavailableHint) {
+    if (!hint.sessionId.trim()) {
+      return;
+    }
+    sessionUnavailableListeners.forEach((listener) => listener(hint));
   },
 };

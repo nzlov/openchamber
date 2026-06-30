@@ -289,6 +289,41 @@ describe('Codex routes', () => {
     expect(protocolRuntime.deleteThread).toHaveBeenCalledWith({ threadId: 'thread-1' });
   });
 
+  it('resumes unloaded threads before retrying thread read', async () => {
+    const { protocolRuntime, runtime } = createRuntime({ state: { running: true, initialized: true } });
+    const { call } = createRouteHarness(runtime);
+    protocolRuntime.readThread
+      .mockRejectedValueOnce(new Error('thread/read failed: thread not loaded: thread-1 (-32600)'))
+      .mockResolvedValueOnce({ thread: { id: 'thread-1' } });
+
+    const response = await call('GET', '/api/codex/threads/:threadId', {
+      params: { threadId: 'thread-1' },
+      query: { includeTurns: 'true' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({ thread: { id: 'thread-1' } });
+    expect(protocolRuntime.resumeThread).toHaveBeenCalledWith({ threadId: 'thread-1', excludeTurns: true });
+    expect(protocolRuntime.readThread).toHaveBeenCalledTimes(2);
+    expect(protocolRuntime.readThread).toHaveBeenLastCalledWith({ threadId: 'thread-1', includeTurns: true });
+  });
+
+  it('returns 404 when an unloaded thread cannot be resumed from disk', async () => {
+    const { protocolRuntime, runtime } = createRuntime({ state: { running: true, initialized: true } });
+    const { call } = createRouteHarness(runtime);
+    protocolRuntime.readThread
+      .mockRejectedValueOnce(new Error('thread/read failed: thread not loaded: thread-1 (-32600)'));
+    protocolRuntime.resumeThread
+      .mockRejectedValueOnce(new Error('thread/resume failed: no rollout found for thread id thread-1 (-32600)'));
+
+    const response = await call('GET', '/api/codex/threads/:threadId', {
+      params: { threadId: 'thread-1' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body.error.message).toContain('no rollout found for thread id thread-1');
+  });
+
   it('starts and interrupts turns through the protocol runtime', async () => {
     const { protocolRuntime, runtime } = createRuntime({ state: { running: true, initialized: true } });
     const { call } = createRouteHarness(runtime);
@@ -375,6 +410,53 @@ describe('Codex routes', () => {
 
     expect(emptyResponse.statusCode).toBe(200);
     expect(emptyResponse.body).toEqual({ data: [], nextCursor: null, backwardsCursor: null });
+  });
+
+  it('resumes unloaded threads before retrying turn list', async () => {
+    const { protocolRuntime, runtime } = createRuntime({ state: { running: true, initialized: true } });
+    const { call } = createRouteHarness(runtime);
+    protocolRuntime.listThreadTurns
+      .mockRejectedValueOnce(new Error('thread/turns/list failed: thread not loaded: thread-1 (-32600)'))
+      .mockResolvedValueOnce({
+        data: [{ id: 'turn-1', items: [], itemsView: 'full', status: 'completed' }],
+        nextCursor: null,
+        backwardsCursor: null,
+      });
+
+    const response = await call('GET', '/api/codex/threads/:threadId/turns', {
+      params: { threadId: 'thread-1' },
+      query: { limit: '20', itemsView: 'full' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({
+      data: [{ id: 'turn-1', items: [], itemsView: 'full', status: 'completed' }],
+      nextCursor: null,
+      backwardsCursor: null,
+    });
+    expect(protocolRuntime.resumeThread).toHaveBeenCalledWith({ threadId: 'thread-1', excludeTurns: true });
+    expect(protocolRuntime.listThreadTurns).toHaveBeenCalledTimes(2);
+    expect(protocolRuntime.listThreadTurns).toHaveBeenLastCalledWith({
+      threadId: 'thread-1',
+      limit: 20,
+      itemsView: 'full',
+    });
+  });
+
+  it('returns an empty turn page when an unloaded thread has no rollout on disk', async () => {
+    const { protocolRuntime, runtime } = createRuntime({ state: { running: true, initialized: true } });
+    const { call } = createRouteHarness(runtime);
+    protocolRuntime.listThreadTurns
+      .mockRejectedValueOnce(new Error('thread/turns/list failed: thread not loaded: thread-1 (-32600)'));
+    protocolRuntime.resumeThread
+      .mockRejectedValueOnce(new Error('thread/resume failed: no rollout found for thread id thread-1 (-32600)'));
+
+    const response = await call('GET', '/api/codex/threads/:threadId/turns', {
+      params: { threadId: 'thread-1' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({ data: [], nextCursor: null, backwardsCursor: null });
   });
 
   it('runs shell commands through the Codex thread shell method', async () => {

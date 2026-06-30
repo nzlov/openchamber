@@ -21,6 +21,7 @@ import {
 } from "./session-prefetch-cache"
 import { getSessionMaterializationStatus, materializeSessionSnapshots } from "./materialization"
 import { findMessageIndexById, insertMessageOrdered } from "./message-order"
+import { sessionEvents } from "@/lib/sessionEvents"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const INITIAL_MESSAGE_PAGE_SIZE = 50
@@ -80,8 +81,15 @@ function formatSdkError(error: unknown): string {
 
 export function isThreadNotLoadedSessionError(error: unknown): boolean {
   const message = formatSdkError(error).toLowerCase()
-  return message.includes("thread/read failed")
-    && message.includes("thread not loaded")
+  return (
+    ((message.includes("thread/read failed") || message.includes("thread/turns/list failed"))
+      && message.includes("thread not loaded"))
+    || isMissingRolloutSessionError(error)
+  )
+}
+
+export function isMissingRolloutSessionError(error: unknown): boolean {
+  return formatSdkError(error).toLowerCase().includes("no rollout found for thread id")
 }
 
 function assertSdkSuccess<T>(result: SdkResult<T>, operation: string): void {
@@ -500,6 +508,8 @@ export function useSync() {
                 } catch (e) {
                   if (!isThreadNotLoadedSessionError(e)) {
                     console.error("[sync] failed to fetch session", sessionID, e)
+                  } else if (isMissingRolloutSessionError(e)) {
+                    sessionEvents.reportSessionUnavailable({ sessionId: sessionID, reason: "missing-rollout" })
                   }
                 }
               })()

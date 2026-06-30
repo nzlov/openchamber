@@ -1824,7 +1824,12 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
             }
         }
 
-        const sendMessageOptions = delivery ? { delivery } : undefined;
+        const sendMessageOptions = delivery || newSessionDraftOpen
+            ? {
+                ...(delivery ? { delivery } : {}),
+                ...(newSessionDraftOpen ? { draftFallback: newSessionDraft } : {}),
+            }
+            : undefined;
 
         // Build the primary message (first part) and additional parts
         let primaryText = '';
