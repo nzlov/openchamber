@@ -1127,6 +1127,7 @@ class CodexCompatClient {
         push(params.threadId, {
           type: 'message.part.delta',
           properties: {
+            sessionID: params.threadId,
             messageID: messageId,
             partID: `${messageId}-text`,
             field: 'text',
@@ -1146,6 +1147,7 @@ class CodexCompatClient {
         push(params.threadId, {
           type: 'message.part.delta',
           properties: {
+            sessionID: params.threadId,
             messageID: messageId,
             partID: `${messageId}-reasoning`,
             field: 'text',

@@ -353,10 +353,37 @@ describe('Codex runtime client migration facade', () => {
     expect(events[0]?.payload).toEqual({
       type: 'message.part.delta',
       properties: {
+        sessionID: 'thread_1',
         messageID: 'thread_1:turn_1:000000:item_reasoning',
         partID: 'thread_1:turn_1:000000:item_reasoning-reasoning',
         field: 'text',
         delta: 'thinking...',
+      },
+    });
+  });
+
+  test('includes session id on Codex assistant deltas so first streaming events route to the session store', () => {
+    const events = (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thread_agent',
+        turnId: 'turn_1',
+        itemId: 'item_agent',
+        delta: 'hello',
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toEqual({
+      type: 'message.part.delta',
+      properties: {
+        sessionID: 'thread_agent',
+        messageID: 'thread_agent:turn_1:000000:item_agent',
+        partID: 'thread_agent:turn_1:000000:item_agent-text',
+        field: 'text',
+        delta: 'hello',
       },
     });
   });
