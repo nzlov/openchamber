@@ -38,6 +38,19 @@ describe('projectTurnRecords', () => {
         expect(projection.ungroupedMessageIds.size).toBe(0);
     });
 
+    test('groups parentless assistant replies under the nearest preceding user turn', () => {
+        const user = createMessageEntry({ id: 'u1', role: 'user', createdAt: 1 });
+        const reasoning = createMessageEntry({ id: 'rs1', role: 'assistant', createdAt: 2 });
+        const assistant = createMessageEntry({ id: 'a1', role: 'assistant', createdAt: 3 });
+
+        const projection = projectTurnRecords([user, reasoning, assistant]);
+
+        expect(projection.turns).toHaveLength(1);
+        expect(projection.turns[0]?.turnId).toBe('u1');
+        expect(projection.turns[0]?.assistantMessageIds).toEqual(['rs1', 'a1']);
+        expect(projection.ungroupedMessageIds.size).toBe(0);
+    });
+
     test('keeps out-of-order assistant replies attached to their parent user turn', () => {
         const user1 = createMessageEntry({ id: 'u1', role: 'user', createdAt: 1 });
         const assistant1 = createMessageEntry({ id: 'a1', role: 'assistant', parentID: 'u1', createdAt: 2 });

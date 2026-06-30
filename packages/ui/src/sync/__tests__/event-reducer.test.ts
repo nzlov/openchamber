@@ -168,6 +168,37 @@ describe("applyDirectoryEvent", () => {
     }])
   })
 
+  test("orders server assistant after optimistic user by creation time", () => {
+    const draft = state({
+      message: {
+        ses_1: [{
+          id: "msg_optimistic_user",
+          sessionID: "ses_1",
+          role: "user",
+          time: { created: 10 },
+        } as never],
+      },
+    })
+
+    const result = applyDirectoryEvent(draft, {
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "019f_server_assistant",
+          sessionID: "ses_1",
+          role: "assistant",
+          time: { created: 11 },
+        },
+      },
+    } as Event)
+
+    expect(result).toBe(true)
+    expect(draft.message.ses_1.map((item) => item.id)).toEqual([
+      "msg_optimistic_user",
+      "019f_server_assistant",
+    ])
+  })
+
   test("skips duplicate session status events", () => {
     const draft = state()
     const busyStatus = { type: "busy" } as SessionStatus

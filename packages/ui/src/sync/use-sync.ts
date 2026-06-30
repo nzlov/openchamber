@@ -20,6 +20,7 @@ import {
   clearSessionPrefetch,
 } from "./session-prefetch-cache"
 import { getSessionMaterializationStatus, materializeSessionSnapshots } from "./materialization"
+import { findMessageIndexById, insertMessageOrdered } from "./message-order"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const INITIAL_MESSAGE_PAGE_SIZE = 50
@@ -558,9 +559,9 @@ export function useSync() {
 
       // Insert message
       const messages = message[input.sessionID] ? [...message[input.sessionID]] : []
-      const result = Binary.search(messages, input.message.id, (m) => m.id)
-      if (!result.found) messages.splice(result.index, 0, input.message)
-      message[input.sessionID] = messages
+      message[input.sessionID] = findMessageIndexById(messages, input.message.id) >= 0
+        ? messages
+        : insertMessageOrdered(messages, input.message)
 
       // Insert parts
       part[input.message.id] = sortParts(input.parts)
@@ -582,9 +583,9 @@ export function useSync() {
       const messages = message[input.sessionID]
       if (messages) {
         const next = [...messages]
-        const result = Binary.search(next, input.messageID, (m) => m.id)
-        if (result.found) {
-          next.splice(result.index, 1)
+        const index = findMessageIndexById(next, input.messageID)
+        if (index >= 0) {
+          next.splice(index, 1)
           message[input.sessionID] = next
         }
       }

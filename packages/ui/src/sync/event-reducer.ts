@@ -14,6 +14,7 @@ import type { FileDiff, GlobalState, State } from "./types"
 import { dropSessionCaches } from "./session-cache"
 import { stripSessionDiffSnapshots } from "./sanitize"
 import { syncDebug } from "./debug"
+import { findMessageIndexById, insertMessageOrdered, sortMessages } from "./message-order"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const DELTA_OVERLAP_FIELDS = ["text", "output"] as const
@@ -310,21 +311,19 @@ export function applyDirectoryEvent(
         draft.message[info.sessionID] = [info]
         changed = true
       } else {
-        const result = Binary.search(messages, info.id, (m) => m.id)
-        if (result.found) {
+        const existingIndex = findMessageIndexById(messages, info.id)
+        if (existingIndex >= 0) {
           // Skip message replacement if unchanged — preserves reference, avoids re-render
-          const existing = messages[result.index]
+          const existing = messages[existingIndex]
           const unchanged = areMessageUpdateFieldsEqual(existing, info)
           if (!unchanged) {
             const next = [...messages]
-            next[result.index] = info
-            draft.message[info.sessionID] = next
+            next[existingIndex] = info
+            draft.message[info.sessionID] = sortMessages(next)
             changed = true
           }
         } else {
-          const next = [...messages]
-          next.splice(result.index, 0, info)
-          draft.message[info.sessionID] = next
+          draft.message[info.sessionID] = insertMessageOrdered(messages, info)
           changed = true
         }
       }
@@ -345,9 +344,9 @@ export function applyDirectoryEvent(
       const messages = draft.message[props.sessionID]
       if (messages) {
         const next = [...messages]
-        const result = Binary.search(next, props.messageID, (m) => m.id)
-        if (result.found) {
-          next.splice(result.index, 1)
+        const index = findMessageIndexById(next, props.messageID)
+        if (index >= 0) {
+          next.splice(index, 1)
           draft.message[props.sessionID] = next
         }
       }

@@ -224,14 +224,19 @@ export const projectTurnRecords = (
         groupedMessageIds.add(message.info.id);
     });
 
+    let nearestUserTurn: TurnRecord | undefined;
     messages.forEach((message, index) => {
         const role = resolveMessageRole(message);
+        if (role === 'user') {
+            nearestUserTurn = turnByUserId.get(message.info.id);
+            return;
+        }
         if (role !== 'assistant') {
             return;
         }
 
         const parentId = getMessageParentId(message);
-        const targetTurn = parentId ? turnByUserId.get(parentId) : undefined;
+        const targetTurn = parentId ? turnByUserId.get(parentId) : nearestUserTurn;
         if (!targetTurn) {
             return;
         }

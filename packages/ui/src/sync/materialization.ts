@@ -1,5 +1,5 @@
 import type { Message, Part } from "@/lib/codex/types"
-import { mergeMessages } from "./optimistic"
+import { ensureMessagesOrdered, mergeMessages } from "./message-order"
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const STREAMING_PART_FIELDS = ["text", "output"] as const
@@ -163,7 +163,7 @@ export function materializeSessionSnapshots(
     .sort((left, right) => cmp(left.info.id, right.info.id))
   const nextMessages = snapshots.map((record) => record.info)
   const existingMessages = state.message[sessionID]
-  const currentMessages = existingMessages ?? []
+  const currentMessages = existingMessages ? ensureMessagesOrdered(existingMessages) : []
   const messages = mergeMessages(currentMessages, nextMessages)
   const messagesChanged = messages !== currentMessages || (existingMessages === undefined && snapshots.length === 0)
 

@@ -1,5 +1,6 @@
 import type { Message, Part } from "@/lib/codex/types"
 import { Binary } from "./binary"
+import { findMessageIndexById, insertMessageOrdered } from "./message-order"
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -41,14 +42,13 @@ const mergeParts = (parts: Part[] | undefined, want: Part[]) => {
 export function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
   if (items.length === 0) return { ...page, confirmed: [] as string[] }
 
-  const session = [...page.session]
+  let session = [...page.session]
   const part = new Map(page.part.map((item) => [item.id, sortParts(item.part)]))
   const confirmed: string[] = []
 
   for (const item of items) {
-    const result = Binary.search(session, item.message.id, (message) => message.id)
-    const found = result.found
-    if (!found) session.splice(result.index, 0, item.message)
+    const found = findMessageIndexById(session, item.message.id) >= 0
+    if (!found) session = insertMessageOrdered(session, item.message)
 
     const current = part.get(item.message.id)
     if (found && hasParts(current, item.parts)) {
@@ -68,20 +68,4 @@ export function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) 
       .map(([id, part]) => ({ id, part })),
     confirmed,
   }
-}
-
-/** Merge two sorted message arrays by id, deduplicating.
- *  Preserves references from `a` for items that already exist — avoids
- *  unnecessary React re-renders when prepending older history. */
-export function mergeMessages<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
-  const existing = new Map(a.map((item) => [item.id, item] as const))
-  let changed = false
-  for (const item of b) {
-    if (!existing.has(item.id)) {
-      existing.set(item.id, item)
-      changed = true
-    }
-  }
-  if (!changed) return a as T[]
-  return [...existing.values()].sort((x, y) => cmp(x.id, y.id))
 }
