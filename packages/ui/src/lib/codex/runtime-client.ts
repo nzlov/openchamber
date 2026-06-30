@@ -266,6 +266,8 @@ class CodexCompatClient {
 
   private readonly activeTurns = new Map<string, string>();
 
+  private readonly pendingTurns = new Set<string>();
+
   private readonly turnItemOrders = new Map<string, Map<string, number>>();
 
   private readonly nextTurnItemOrder = new Map<string, number>();
@@ -710,15 +712,20 @@ class CodexCompatClient {
       : typeof params.modelID === 'string'
         ? params.modelID
         : undefined;
-    const response = await codexClient.startTurn(sessionId, {
-      input: input as any,
-      cwd: typeof params.directory === 'string' ? params.directory : this.getDirectory() ?? undefined,
-      ...(model ? { model } : {}),
-      ...(typeof params.messageId === 'string' ? { clientUserMessageId: params.messageId } : {}),
-    });
-    const turn = extractObject(response, 'turn');
-    if (typeof turn?.id === 'string') {
-      this.activeTurns.set(sessionId, turn.id);
+    this.pendingTurns.add(sessionId);
+    try {
+      const response = await codexClient.startTurn(sessionId, {
+        input: input as any,
+        cwd: typeof params.directory === 'string' ? params.directory : this.getDirectory() ?? undefined,
+        ...(model ? { model } : {}),
+        ...(typeof params.messageId === 'string' ? { clientUserMessageId: params.messageId } : {}),
+      });
+      const turn = extractObject(response, 'turn');
+      if (typeof turn?.id === 'string') {
+        this.activeTurns.set(sessionId, turn.id);
+      }
+    } finally {
+      this.pendingTurns.delete(sessionId);
     }
     const record = this.toUserMessageRecord(sessionId, `local_${Date.now().toString(16)}`, input);
     return record;
@@ -908,13 +915,29 @@ class CodexCompatClient {
   }
 
   private async abortSession(sessionId: string): Promise<void> {
-    const turnId = this.activeTurns.get(sessionId);
+    const turnId = this.activeTurns.get(sessionId) ?? await this.findActiveTurnId(sessionId);
     if (!turnId) return;
     try {
       await codexClient.interruptTurn(sessionId, turnId);
     } finally {
       this.activeTurns.delete(sessionId);
     }
+  }
+
+  private async findActiveTurnId(sessionId: string): Promise<string | null> {
+    const response = await codexClient.listThreadTurns(sessionId, {
+      limit: 10,
+      sortDirection: 'desc',
+      itemsView: 'full',
+    });
+    const turns = extractArray(response) as CodexTurn[];
+    const activeTurn = turns.find((turn) => (
+      typeof turn?.id === 'string'
+      && turn.status !== 'completed'
+      && turn.status !== 'failed'
+      && turn.status !== 'interrupted'
+    ));
+    return typeof activeTurn?.id === 'string' ? activeTurn.id : null;
   }
 
   private async resolveRollbackTurnCount(sessionId: string, messageId?: string): Promise<number> {
@@ -1064,11 +1087,14 @@ class CodexCompatClient {
     }
 
     if (method === 'thread/status/changed' && typeof params.threadId === 'string') {
+      const statusType = params.status === 'running' || params.status === 'busy' || this.activeTurns.has(params.threadId) || this.pendingTurns.has(params.threadId)
+        ? 'busy'
+        : 'idle';
       push(params.threadId, {
         type: 'session.status',
         properties: {
           sessionID: params.threadId,
-          status: { type: params.status === 'running' || params.status === 'busy' ? 'busy' : 'idle' },
+          status: { type: statusType },
         },
       } as Event);
       return events;
@@ -1089,6 +1115,7 @@ class CodexCompatClient {
     }
 
     if (method === 'turn/completed' && typeof params.threadId === 'string') {
+      this.pendingTurns.delete(params.threadId);
       this.activeTurns.delete(params.threadId);
       push(params.threadId, {
         type: 'session.status',
@@ -1105,9 +1132,7 @@ class CodexCompatClient {
 
     if ((method === 'item/started' || method === 'item/completed') && typeof params.threadId === 'string' && params.item) {
       const turnId = typeof params.turnId === 'string' ? params.turnId : this.activeTurns.get(params.threadId);
-      const messageId = turnId && typeof params.item.id === 'string'
-        ? this.toOrderedMessageId(params.threadId, turnId, this.getOrAssignTurnItemOrder(params.threadId, turnId, params.item.id), params.item.id)
-        : undefined;
+      const messageId = this.toMessageIdForItem(params.threadId, turnId, params.item);
       const record = this.toMessageRecord(params.threadId, params.item, undefined, undefined, messageId);
       if (record) {
         push(params.threadId, {
@@ -1201,9 +1226,14 @@ class CodexCompatClient {
     let parentUserMessageId: string | undefined;
     for (const [index, item] of items.entries()) {
       const itemId = typeof item?.id === 'string' ? item.id : null;
-      const messageId = turnId && itemId
-        ? this.toOrderedMessageId(sessionId, turnId, index, itemId)
+      const clientId = item?.type === 'userMessage' && typeof item.clientId === 'string' && item.clientId.trim()
+        ? item.clientId
         : undefined;
+      const messageId = clientId ?? (
+        turnId && itemId
+          ? this.toOrderedMessageId(sessionId, turnId, index, itemId)
+          : undefined
+      );
       const record = this.toMessageRecord(sessionId, item, turn, item?.type === 'userMessage' ? undefined : parentUserMessageId, messageId);
       if (record) records.push(record);
       if (item?.type === 'userMessage' && itemId) {
@@ -1244,6 +1274,16 @@ class CodexCompatClient {
     if (!turnId) return this.toCompatMessageId(sessionId, itemId);
     const order = this.getOrAssignTurnItemOrder(sessionId, turnId, itemId);
     return this.toOrderedMessageId(sessionId, turnId, order, itemId);
+  }
+
+  private toMessageIdForItem(sessionId: string, turnId: string | undefined, item: CodexThreadItem): string | undefined {
+    if (item.type === 'userMessage' && typeof item.clientId === 'string' && item.clientId.trim()) {
+      return item.clientId;
+    }
+    if (turnId && typeof item.id === 'string') {
+      return this.toMessageIdForEvent(sessionId, turnId, item.id);
+    }
+    return undefined;
   }
 
   private toCodexItemId(messageId: string): string {

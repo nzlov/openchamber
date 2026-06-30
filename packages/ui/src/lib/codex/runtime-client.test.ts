@@ -6,11 +6,13 @@ const startTurnCalls: Array<{ threadId: string; body: Record<string, unknown> }>
 const shellCommandCalls: Array<{ threadId: string; body: Record<string, unknown> }> = [];
 const rollbackCalls: Array<{ threadId: string; body: Record<string, unknown> }> = [];
 const forkCalls: Array<{ threadId: string; body: Record<string, unknown> }> = [];
+const interruptTurnCalls: Array<{ threadId: string; turnId: string }> = [];
 const compactCalls: string[] = [];
 const loginAccountCalls: Array<Record<string, unknown>> = [];
 const readThreadCalls: Array<{ threadId: string; query?: Record<string, unknown> }> = [];
 let listThreadTurnsError: Error | null = null;
 let listThreadTurnsResponse: Record<string, unknown> | null = null;
+let startTurnDeferred: { promise: Promise<Record<string, unknown>>; resolve: (value: Record<string, unknown>) => void } | null = null;
 
 mock.module('@/contexts/runtimeAPIRegistry', () => ({
   getRegisteredRuntimeAPIs: mock(() => null),
@@ -85,7 +87,12 @@ mock.module('@/lib/codex/client', () => ({
     readAccount: mock(async () => ({ account: { type: 'chatgpt', email: 'dev@example.test', planType: 'plus' } })),
     startTurn: mock(async (threadId: string, body: Record<string, unknown>) => {
       startTurnCalls.push({ threadId, body });
+      if (startTurnDeferred) return await startTurnDeferred.promise;
       return { turn: { id: 'turn_1', body } };
+    }),
+    interruptTurn: mock(async (threadId: string, turnId: string) => {
+      interruptTurnCalls.push({ threadId, turnId });
+      return {};
     }),
     shellCommand: mock(async (threadId: string, body: Record<string, unknown>) => {
       shellCommandCalls.push({ threadId, body });
@@ -187,6 +194,35 @@ describe('Codex runtime client migration facade', () => {
     const otherMessages = await sdk.session.messages({ sessionID: 'thread_2', limit: 20 });
     expect(otherMessages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual(['thread_2:turn_1:000000:item_user', 'thread_2:turn_1:000001:item_agent']);
     expect(otherMessages.data?.[1]?.parts[0]?.messageID).toBe('thread_2:turn_1:000001:item_agent');
+  });
+
+  test('uses Codex user message client ids to reconcile optimistic sends', async () => {
+    const sdk = codexRuntimeClient.getSdkClient();
+    listThreadTurnsError = null;
+    listThreadTurnsResponse = {
+      data: [{
+        id: 'turn_client',
+        status: 'completed',
+        startedAt: 30,
+        completedAt: 40,
+        items: [
+          { type: 'userMessage', id: 'item_user', clientId: 'msg_client_1', content: [{ type: 'text', text: 'hello', text_elements: [] }] },
+          { type: 'agentMessage', id: 'item_agent', text: 'hi', phase: 'final_answer', memoryCitation: null },
+        ],
+      }],
+      nextCursor: null,
+    };
+
+    const messages = await sdk.session.messages({ sessionID: 'thread_1', limit: 20 });
+
+    expect(messages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual([
+      'msg_client_1',
+      'thread_1:turn_client:000001:item_agent',
+    ]);
+    expect(messages.data?.[1]?.info.parentID).toBe('msg_client_1');
+    expect(messages.data?.[0]?.parts[0]?.messageID).toBe('msg_client_1');
+
+    listThreadTurnsResponse = null;
   });
 
   test('maps Codex tool and reasoning items into renderable message parts', async () => {
@@ -388,6 +424,109 @@ describe('Codex runtime client migration facade', () => {
     });
   });
 
+  test('keeps status busy when Codex reports thread idle before the active turn completes', () => {
+    const translate = (event: unknown) => (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent(event);
+
+    translate({
+      method: 'turn/started',
+      params: {
+        threadId: 'thread_status_race',
+        turn: { id: 'turn_status_race' },
+      },
+    });
+    const events = translate({
+      method: 'thread/status/changed',
+      params: {
+        threadId: 'thread_status_race',
+        status: 'idle',
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toEqual({
+      type: 'session.status',
+      properties: {
+        sessionID: 'thread_status_race',
+        status: { type: 'busy' },
+      },
+    });
+  });
+
+  test('keeps status busy while a new turn request is still pending', async () => {
+    const translate = (event: unknown) => (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent(event);
+    let resolveStartTurn: (value: Record<string, unknown>) => void = () => {};
+    const deferred = {
+      promise: new Promise<Record<string, unknown>>((resolve) => {
+        resolveStartTurn = resolve;
+      }),
+      resolve: resolveStartTurn,
+    };
+    startTurnDeferred = deferred;
+
+    const sendPromise = codexRuntimeClient.sendMessage({
+      sessionID: 'thread_pending_turn',
+      text: 'hello',
+      directory: '/workspace/project',
+    });
+    await Promise.resolve();
+    const events = translate({
+      method: 'thread/status/changed',
+      params: {
+        threadId: 'thread_pending_turn',
+        status: 'idle',
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toEqual({
+      type: 'session.status',
+      properties: {
+        sessionID: 'thread_pending_turn',
+        status: { type: 'busy' },
+      },
+    });
+
+    deferred.resolve({ turn: { id: 'turn_pending' } });
+    await sendPromise;
+    startTurnDeferred = null;
+  });
+
+  test('uses Codex user message client ids for item lifecycle events', () => {
+    const translate = (event: unknown) => (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent(event);
+
+    translate({
+      method: 'turn/started',
+      params: {
+        threadId: 'thread_item_client',
+        turn: { id: 'turn_item_client' },
+      },
+    });
+    const events = translate({
+      method: 'item/completed',
+      params: {
+        threadId: 'thread_item_client',
+        turnId: 'turn_item_client',
+        item: {
+          type: 'userMessage',
+          id: 'item_user_server',
+          clientId: 'msg_item_client',
+          content: [{ type: 'text', text: 'hello', text_elements: [] }],
+        },
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload.type).toBe('message.updated');
+    expect((events[0]?.payload.properties.info as { id?: string }).id).toBe('msg_item_client');
+    expect((events[0]?.payload.properties.parts as Array<{ messageID?: string }>)[0]?.messageID).toBe('msg_item_client');
+  });
+
   test('treats unmaterialized or empty Codex thread history as an empty message page', async () => {
     const sdk = codexRuntimeClient.getSdkClient();
     listThreadTurnsResponse = null;
@@ -444,6 +583,27 @@ describe('Codex runtime client migration facade', () => {
     ]);
     expect(shellCommandCalls).toEqual([
       { threadId: 'thread_1', body: { command: 'pwd' } },
+    ]);
+  });
+
+  test('aborts the latest active Codex turn when the in-memory active turn was lost', async () => {
+    const sdk = codexRuntimeClient.getSdkClient();
+    interruptTurnCalls.length = 0;
+    listThreadTurnsError = null;
+    listThreadTurnsResponse = {
+      data: [
+        { id: 'turn_completed', status: 'completed', startedAt: 10, completedAt: 20, items: [] },
+        { id: 'turn_running', status: 'inProgress', startedAt: 30, completedAt: null, items: [] },
+      ],
+      nextCursor: null,
+    };
+
+    await sdk.session.abort({ sessionID: 'thread_lost' });
+
+    listThreadTurnsResponse = null;
+
+    expect(interruptTurnCalls).toEqual([
+      { threadId: 'thread_lost', turnId: 'turn_running' },
     ]);
   });
 
