@@ -274,6 +274,8 @@ class CodexCompatClient {
 
   private readonly nextTurnItemOrder = new Map<string, number>();
 
+  private readonly turnMessageIds = new Map<string, Set<string>>();
+
   private readonly pendingProviderOAuthLogins = new Map<string, string>();
 
   constructor() {
@@ -1168,6 +1170,9 @@ class CodexCompatClient {
         const turnKey = this.toTurnKey(params.threadId, params.turn.id);
         this.turnItemOrders.set(turnKey, new Map());
         this.nextTurnItemOrder.set(turnKey, 0);
+        if (!this.turnMessageIds.has(turnKey)) {
+          this.turnMessageIds.set(turnKey, new Set());
+        }
       }
       push(params.threadId, {
         type: 'session.status',
@@ -1177,17 +1182,32 @@ class CodexCompatClient {
     }
 
     if (method === 'turn/completed' && typeof params.threadId === 'string') {
+      const completedTurnId = typeof params.turn?.id === 'string' ? params.turn.id : undefined;
+      const records = this.toMessageRecords(params.threadId, params.turn);
+      const authoritativeMessageIds = new Set(records.map((record) => record.info.id));
+      const staleMessageIds = completedTurnId
+        ? this.getUnconfirmedTurnMessageIds(params.threadId, completedTurnId, authoritativeMessageIds)
+        : [];
       this.pendingTurns.delete(params.threadId);
       this.activeTurns.delete(params.threadId);
       push(params.threadId, {
         type: 'session.status',
         properties: { sessionID: params.threadId, status: { type: 'idle' } },
       } as Event);
-      for (const record of this.toMessageRecords(params.threadId, params.turn)) {
+      for (const messageID of staleMessageIds) {
+        push(params.threadId, {
+          type: 'message.removed',
+          properties: { sessionID: params.threadId, messageID },
+        } as Event);
+      }
+      for (const record of records) {
         push(params.threadId, {
           type: 'message.updated',
           properties: { info: record.info, parts: record.parts },
         } as Event);
+      }
+      if (completedTurnId) {
+        this.clearTurnMessageTracking(params.threadId, completedTurnId);
       }
       return events;
     }
@@ -1197,6 +1217,7 @@ class CodexCompatClient {
       const messageId = this.toMessageIdForItem(params.threadId, turnId, params.item);
       const record = this.toMessageRecord(params.threadId, params.item, undefined, undefined, messageId);
       if (record) {
+        this.rememberTurnMessageId(params.threadId, turnId, record.info.id);
         push(params.threadId, {
           type: 'message.updated',
           properties: { info: record.info, parts: record.parts },
@@ -1211,6 +1232,7 @@ class CodexCompatClient {
       if (itemId && delta) {
         const turnId = typeof params.turnId === 'string' ? params.turnId : this.activeTurns.get(params.threadId);
         const messageId = this.toMessageIdForEvent(params.threadId, turnId, itemId);
+        this.rememberTurnMessageId(params.threadId, turnId, messageId);
         push(params.threadId, {
           type: 'message.part.delta',
           properties: {
@@ -1231,6 +1253,7 @@ class CodexCompatClient {
       if (itemId && delta) {
         const turnId = typeof params.turnId === 'string' ? params.turnId : this.activeTurns.get(params.threadId);
         const messageId = this.toMessageIdForEvent(params.threadId, turnId, itemId);
+        this.rememberTurnMessageId(params.threadId, turnId, messageId);
         push(params.threadId, {
           type: 'message.part.delta',
           properties: {
@@ -1395,6 +1418,29 @@ class CodexCompatClient {
     orders.set(itemId, next);
     this.nextTurnItemOrder.set(turnKey, next + 1);
     return next;
+  }
+
+  private rememberTurnMessageId(sessionId: string, turnId: string | undefined, messageId: string | undefined): void {
+    if (!turnId || !messageId) return;
+    const turnKey = this.toTurnKey(sessionId, turnId);
+    let messageIds = this.turnMessageIds.get(turnKey);
+    if (!messageIds) {
+      messageIds = new Set();
+      this.turnMessageIds.set(turnKey, messageIds);
+    }
+    messageIds.add(messageId);
+  }
+
+  private getUnconfirmedTurnMessageIds(sessionId: string, turnId: string, authoritativeMessageIds: ReadonlySet<string>): string[] {
+    const turnKey = this.toTurnKey(sessionId, turnId);
+    const messageIds = this.turnMessageIds.get(turnKey);
+    if (!messageIds) return [];
+    return [...messageIds].filter((messageId) => !authoritativeMessageIds.has(messageId));
+  }
+
+  private clearTurnMessageTracking(sessionId: string, turnId: string): void {
+    const turnKey = this.toTurnKey(sessionId, turnId);
+    this.turnMessageIds.delete(turnKey);
   }
 
   private toMessageIdForEvent(sessionId: string, turnId: string | undefined, itemId: string): string {

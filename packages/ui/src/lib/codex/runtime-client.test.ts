@@ -568,6 +568,192 @@ describe('Codex runtime client migration facade', () => {
     });
   });
 
+  test('removes live assistant message ids that are replaced by completed turn items', () => {
+    const translate = (event: unknown) => (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent(event);
+
+    translate({
+      method: 'turn/started',
+      params: {
+        threadId: 'thread_reconcile',
+        turn: { id: 'turn_reconcile' },
+      },
+    });
+    translate({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thread_reconcile',
+        turnId: 'turn_reconcile',
+        itemId: 'msg_tmp_assistant',
+        delta: 'final text',
+      },
+    });
+
+    const events = translate({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thread_reconcile',
+        turn: {
+          id: 'turn_reconcile',
+          items: [
+            {
+              type: 'userMessage',
+              id: 'item_user',
+              clientId: 'msg_user_client',
+              content: [{ type: 'text', text: 'question', text_elements: [] }],
+            },
+            {
+              type: 'agentMessage',
+              id: 'item-15',
+              text: 'final text',
+            },
+          ],
+          status: 'completed',
+          startedAt: 1,
+          completedAt: 2,
+        },
+      },
+    });
+
+    expect(events.map((event) => event.payload.type)).toEqual([
+      'session.status',
+      'message.removed',
+      'message.updated',
+      'message.updated',
+    ]);
+    expect(events[1]?.payload.properties).toEqual({
+      sessionID: 'thread_reconcile',
+      messageID: 'thread_reconcile:turn_reconcile:000000:msg_tmp_assistant',
+    });
+    expect((events[3]?.payload.properties.info as { id?: string }).id).toBe(
+      'thread_reconcile:turn_reconcile:000001:item-15'
+    );
+  });
+
+  test('keeps completed turn item ordering stable for late item lifecycle events', () => {
+    const translate = (event: unknown) => (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent(event);
+
+    translate({
+      method: 'turn/started',
+      params: {
+        threadId: 'thread_late_item',
+        turn: { id: 'turn_late_item' },
+      },
+    });
+    translate({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thread_late_item',
+        turnId: 'turn_late_item',
+        itemId: 'msg_tmp_assistant',
+        delta: 'final text',
+      },
+    });
+    translate({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thread_late_item',
+        turn: {
+          id: 'turn_late_item',
+          items: [
+            {
+              type: 'userMessage',
+              id: 'item_user',
+              clientId: 'msg_user_client',
+              content: [{ type: 'text', text: 'question', text_elements: [] }],
+            },
+            {
+              type: 'agentMessage',
+              id: 'item-15',
+              text: 'final text',
+            },
+          ],
+          status: 'completed',
+          startedAt: 1,
+          completedAt: 2,
+        },
+      },
+    });
+
+    const events = translate({
+      method: 'item/completed',
+      params: {
+        threadId: 'thread_late_item',
+        turnId: 'turn_late_item',
+        item: {
+          type: 'agentMessage',
+          id: 'item-15',
+          text: 'final text',
+        },
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect((events[0]?.payload.properties.info as { id?: string }).id).toBe(
+      'thread_late_item:turn_late_item:000001:item-15'
+    );
+  });
+
+  test('does not forget live message ids when turn started arrives after a delta', () => {
+    const translate = (event: unknown) => (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent(event);
+
+    translate({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thread_out_of_order',
+        turnId: 'turn_out_of_order',
+        itemId: 'msg_tmp_assistant',
+        delta: 'final text',
+      },
+    });
+    translate({
+      method: 'turn/started',
+      params: {
+        threadId: 'thread_out_of_order',
+        turn: { id: 'turn_out_of_order' },
+      },
+    });
+
+    const events = translate({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thread_out_of_order',
+        turn: {
+          id: 'turn_out_of_order',
+          items: [
+            {
+              type: 'userMessage',
+              id: 'item_user',
+              clientId: 'msg_user_client',
+              content: [{ type: 'text', text: 'question', text_elements: [] }],
+            },
+            {
+              type: 'agentMessage',
+              id: 'item-15',
+              text: 'final text',
+            },
+          ],
+          status: 'completed',
+          startedAt: 1,
+          completedAt: 2,
+        },
+      },
+    });
+
+    expect(events[1]?.payload).toEqual({
+      type: 'message.removed',
+      properties: {
+        sessionID: 'thread_out_of_order',
+        messageID: 'thread_out_of_order:turn_out_of_order:000000:msg_tmp_assistant',
+      },
+    });
+  });
+
   test('keeps status busy when Codex reports thread idle before the active turn completes', () => {
     const translate = (event: unknown) => (codexRuntimeClient as unknown as {
       translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
