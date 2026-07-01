@@ -261,6 +261,25 @@ describe("applyDirectoryEvent", () => {
     expect((draft.session_status.ses_1 as Extract<SessionStatus, { type: "retry" }>).attempt).toBe(2)
   })
 
+  test("detects error status message changes", () => {
+    const draft = state({
+      session_status: {
+        ses_1: { type: "error", message: "old error" } as SessionStatus,
+      },
+    })
+
+    const event = {
+      type: "session.status",
+      properties: {
+        sessionID: "ses_1",
+        status: { type: "error", message: "new error" } as SessionStatus,
+      },
+    } as Event
+
+    expect(applyDirectoryEvent(draft, event)).toBe(true)
+    expect(draft.session_status.ses_1.message).toBe("new error")
+  })
+
   test("updates permission request arrays immutably", () => {
     const initialPermissions = [
       { id: "perm_1", sessionID: "ses_1" } as PermissionRequest,

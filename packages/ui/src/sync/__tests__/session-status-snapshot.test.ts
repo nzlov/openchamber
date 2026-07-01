@@ -10,7 +10,7 @@ import {
   shouldTriggerStaleResync,
 } from "../sync-context"
 
-type StatusSnapshot = Record<string, { type: "idle" | "busy" | "retry"; attempt?: number; message?: string; next?: number }>
+type StatusSnapshot = Record<string, { type: "idle" | "busy" | "retry" | "error"; attempt?: number; message?: string; next?: number }>
 
 function createDirectoryStore(initial: Partial<State>): StoreApi<DirectoryStore> {
   return create<DirectoryStore>()((set) => ({
@@ -60,6 +60,13 @@ describe("applySessionStatusSnapshot", () => {
       const retry: SessionStatus = { type: "retry", attempt: 2, message: "x", next: 30 }
       applySessionStatusSnapshot(store, { ses_a: { type: "retry", attempt: 2, message: "x", next: 30 } }, ["ses_a"], "monotonic")
       expect(store.getState().session_status.ses_a).toEqual(retry)
+    })
+
+    test("raises an idle/unknown session to error when the snapshot reports a system error", () => {
+      const store = createDirectoryStore({ session_status: {} })
+      const changed = applySessionStatusSnapshot(store, { ses_a: { type: "error", message: "Codex failed" } }, ["ses_a"], "monotonic")
+      expect(changed).toBe(true)
+      expect(store.getState().session_status.ses_a).toEqual({ type: "error", message: "Codex failed" })
     })
   })
 

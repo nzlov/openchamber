@@ -9,7 +9,12 @@ const forkCalls: Array<{ threadId: string; body: Record<string, unknown> }> = []
 const interruptTurnCalls: Array<{ threadId: string; turnId: string }> = [];
 const compactCalls: string[] = [];
 const loginAccountCalls: Array<Record<string, unknown>> = [];
+const listThreadsCalls: Array<Record<string, unknown>> = [];
 const readThreadCalls: Array<{ threadId: string; query?: Record<string, unknown> }> = [];
+let listThreadsResponse: Record<string, unknown> | null = null;
+let readThreadResponse: Record<string, unknown> | null = null;
+const readThreadResponses = new Map<string, Record<string, unknown>>();
+const readThreadErrors = new Map<string, Error>();
 let listThreadTurnsError: Error | null = null;
 let listThreadTurnsResponse: Record<string, unknown> | null = null;
 let startTurnDeferred: { promise: Promise<Record<string, unknown>>; resolve: (value: Record<string, unknown>) => void } | null = null;
@@ -33,7 +38,9 @@ mock.module('@/lib/runtime-fetch', () => ({
 mock.module('@/lib/codex/client', () => ({
   codexClient: {
     getHealth: mock(async () => ({ ready: false, running: false, initialized: false })),
-    listThreads: mock(async () => ({
+    listThreads: mock(async (query: Record<string, unknown> = {}) => {
+      listThreadsCalls.push(query);
+      return listThreadsResponse ?? ({
       data: [{
         id: 'thread_1',
         name: 'Thread one',
@@ -42,12 +49,17 @@ mock.module('@/lib/codex/client', () => ({
         updatedAt: 20,
       }],
       nextCursor: 'cursor:threads:2',
-    })),
+      });
+    }),
     readConfig: mock(async () => ({ model: 'gpt-5-codex' })),
     updateConfig: mock(async (value: Record<string, unknown>) => value),
     readThread: mock(async (threadId: string, query?: Record<string, unknown>) => {
       readThreadCalls.push({ threadId, query });
-      return {
+      const keyedError = readThreadErrors.get(threadId);
+      if (keyedError) throw keyedError;
+      const keyedResponse = readThreadResponses.get(threadId);
+      if (keyedResponse) return keyedResponse;
+      return readThreadResponse ?? {
         thread: {
           id: threadId,
           name: 'Thread one',
@@ -163,6 +175,8 @@ describe('Codex runtime client migration facade', () => {
 
   test('maps Codex threads and turn items into the legacy UI facade shape', async () => {
     const sdk = codexRuntimeClient.getSdkClient();
+    listThreadsResponse = null;
+    readThreadResponse = null;
     readThreadCalls.length = 0;
     listThreadTurnsError = null;
     listThreadTurnsResponse = null;
@@ -194,6 +208,136 @@ describe('Codex runtime client migration facade', () => {
     const otherMessages = await sdk.session.messages({ sessionID: 'thread_2', limit: 20 });
     expect(otherMessages.data?.map((record: { info: { id?: string } }) => record.info.id)).toEqual(['thread_2:turn_1:000000:item_user', 'thread_2:turn_1:000001:item_agent']);
     expect(otherMessages.data?.[1]?.parts[0]?.messageID).toBe('thread_2:turn_1:000001:item_agent');
+  });
+
+  test('maps Codex system-error threads into status snapshots', async () => {
+    listThreadsCalls.length = 0;
+    readThreadCalls.length = 0;
+    listThreadsResponse = {
+      data: [
+        { id: 'thread_busy', status: { type: 'active' }, cwd: '/workspace/project' },
+        { id: 'thread_error', status: { type: 'systemError' }, cwd: '/workspace/project' },
+        { id: 'thread_idle', status: { type: 'idle' }, cwd: '/workspace/project' },
+      ],
+      nextCursor: null,
+    };
+
+    const statuses = await codexRuntimeClient.getSessionStatusForDirectory('/workspace/project');
+
+    expect(statuses).toEqual({
+      thread_busy: { type: 'busy' },
+      thread_error: {
+        type: 'error',
+        message: 'Codex runtime reported a system error before producing an assistant response.',
+      },
+    });
+    expect(listThreadsCalls).toEqual([{ archived: false, cwd: '/workspace/project', limit: 200 }]);
+    expect(readThreadCalls).toEqual([]);
+
+    listThreadsResponse = null;
+  });
+
+  test('reads candidate threads directly for status resync snapshots', async () => {
+    listThreadsCalls.length = 0;
+    readThreadCalls.length = 0;
+    readThreadResponses.set('thread_old_error', {
+      thread: {
+        id: 'thread_old_error',
+        status: { type: 'systemError' },
+        cwd: '/workspace/project',
+      },
+    });
+
+    const statuses = await codexRuntimeClient.getSessionStatusForDirectory('/workspace/project', ['thread_old_error']);
+
+    expect(statuses).toEqual({
+      thread_old_error: {
+        type: 'error',
+        message: 'Codex runtime reported a system error before producing an assistant response.',
+      },
+    });
+    expect(listThreadsCalls).toEqual([]);
+    expect(readThreadCalls).toEqual([
+      { threadId: 'thread_old_error', query: { includeTurns: false } },
+    ]);
+
+    readThreadResponses.clear();
+  });
+
+  test('returns null when a candidate thread status fetch fails', async () => {
+    listThreadsCalls.length = 0;
+    readThreadCalls.length = 0;
+    readThreadErrors.set('thread_unavailable', new Error('thread not loaded'));
+
+    const statuses = await codexRuntimeClient.getSessionStatusForDirectory('/workspace/project', ['thread_unavailable']);
+
+    expect(statuses).toBe(null);
+    expect(listThreadsCalls).toEqual([]);
+    expect(readThreadCalls).toEqual([
+      { threadId: 'thread_unavailable', query: { includeTurns: false } },
+    ]);
+
+    readThreadErrors.clear();
+  });
+
+  test('adds a visible assistant error when Codex finishes a system-error turn without assistant output', async () => {
+    const sdk = codexRuntimeClient.getSdkClient();
+    readThreadResponse = {
+      thread: {
+        id: 'thread_system_error',
+        status: { type: 'systemError' },
+        cwd: '/workspace/project',
+        createdAt: 10,
+        updatedAt: 20,
+      },
+    };
+    listThreadTurnsError = null;
+    listThreadTurnsResponse = {
+      data: [{
+        id: 'turn_system_error',
+        status: 'completed',
+        startedAt: 30,
+        completedAt: 40,
+        items: [
+          { type: 'userMessage', id: 'item_user', clientId: 'msg_system_error', content: [{ type: 'text', text: 'hello', text_elements: [] }] },
+        ],
+      }],
+      nextCursor: null,
+    };
+
+    const messages = await sdk.session.messages({ sessionID: 'thread_system_error', limit: 20 });
+
+    expect(messages.data?.map((record: { info: { role?: string } }) => record.info.role)).toEqual(['user', 'assistant']);
+    const errorInfo = messages.data?.[1]?.info as {
+      id?: string;
+      sessionID?: string;
+      role?: string;
+      status?: string;
+      finish?: string;
+      error?: unknown;
+    } | undefined;
+    expect({
+      id: errorInfo?.id,
+      sessionID: errorInfo?.sessionID,
+      role: errorInfo?.role,
+      status: errorInfo?.status,
+      finish: errorInfo?.finish,
+      error: errorInfo?.error,
+    }).toEqual({
+      id: 'thread_system_error:codex-system-error',
+      sessionID: 'thread_system_error',
+      role: 'assistant',
+      status: 'error',
+      finish: 'error',
+      error: {
+        name: 'CodexSystemError',
+        message: 'Codex runtime reported a system error before producing an assistant response.',
+      },
+    });
+    expect(messages.data?.[1]?.parts).toEqual([]);
+
+    readThreadResponse = null;
+    listThreadTurnsResponse = null;
   });
 
   test('uses Codex user message client ids to reconcile optimistic sends', async () => {
@@ -450,6 +594,39 @@ describe('Codex runtime client migration facade', () => {
       properties: {
         sessionID: 'thread_status_race',
         status: { type: 'busy' },
+      },
+    });
+  });
+
+  test('maps system-error status even while an active turn is tracked', () => {
+    const translate = (event: unknown) => (codexRuntimeClient as unknown as {
+      translateCodexEvent: (event: unknown) => Array<{ payload: { type: string; properties: Record<string, unknown> } }>;
+    }).translateCodexEvent(event);
+
+    translate({
+      method: 'turn/started',
+      params: {
+        threadId: 'thread_status_error',
+        turn: { id: 'turn_status_error' },
+      },
+    });
+    const events = translate({
+      method: 'thread/status/changed',
+      params: {
+        threadId: 'thread_status_error',
+        status: { type: 'systemError' },
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toEqual({
+      type: 'session.status',
+      properties: {
+        sessionID: 'thread_status_error',
+        status: {
+          type: 'error',
+          message: 'Codex runtime reported a system error before producing an assistant response.',
+        },
       },
     });
   });

@@ -402,6 +402,12 @@ function toSessionStatus(status: Awaited<ReturnType<typeof codexRuntimeClient.ge
   if (status.type === "idle" || status.type === "busy") {
     return { type: status.type }
   }
+  if (status.type === "error") {
+    return {
+      type: "error",
+      message: typeof status.message === "string" ? status.message : undefined,
+    }
+  }
   if (
     status.type === "retry"
     && typeof status.attempt === "number"
@@ -494,7 +500,7 @@ async function resyncDirectorySessionStatuses(
   candidateSessionIds: string[],
   mode: StatusSnapshotMode,
 ): Promise<DirectorySessionStatusSnapshot | null> {
-  const nextStatuses = await codexRuntimeClient.getSessionStatusForDirectory(directory)
+  const nextStatuses = await codexRuntimeClient.getSessionStatusForDirectory(directory, candidateSessionIds)
   // null = fetch failed; preserve existing state. {} or populated = a snapshot
   // of active sessions — reconciled per `mode` (absence ≠ idle under monotonic).
   if (nextStatuses === null) return null

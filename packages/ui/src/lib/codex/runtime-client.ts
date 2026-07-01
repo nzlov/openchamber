@@ -56,6 +56,8 @@ type CompatMessageTime = { created: number; updated?: number; completed?: number
 type CompatMessageOptions = { parentID?: string; status?: string; finish?: string };
 type CompatPartTime = { start?: number; end?: number };
 
+const CODEX_SYSTEM_ERROR_MESSAGE = 'Codex runtime reported a system error before producing an assistant response.';
+
 const normalizeFsPath = (value: string): string => value.replace(/\\/g, '/');
 
 const unsupported = (operation: string): never => {
@@ -680,16 +682,62 @@ class CodexCompatClient {
       throw error;
     });
     const turns = extractArray(response) as CodexTurn[];
-    return okPage(turns.flatMap((turn) => this.toMessageRecords(id, turn)), extractNextCursor(response));
+    const records = turns.flatMap((turn) => this.toMessageRecords(id, turn));
+    if (!before && this.shouldAppendSystemErrorMessage(records, turns)) {
+      const thread = await this.readThreadForStatus(id);
+      if (thread && this.isSystemErrorThread(thread)) {
+        records.push(this.toSystemErrorMessageRecord(id, turns));
+      }
+    }
+    return okPage(records, extractNextCursor(response));
   }
 
   async getSessionStatus(): Promise<Record<string, CompatSessionStatus>> {
-    return {};
+    const statuses = await this.getSessionStatusForDirectory(this.getDirectory());
+    if (statuses === null) {
+      throw new Error('Codex session status snapshot failed');
+    }
+    return statuses;
   }
 
-  async getSessionStatusForDirectory(_directory?: string | null): Promise<Record<string, CompatSessionStatus>> {
-    void _directory;
-    return {};
+  async getSessionStatusForDirectory(directory?: string | null, candidateSessionIds?: string[]): Promise<Record<string, CompatSessionStatus> | null> {
+    const statuses: Record<string, CompatSessionStatus> = {};
+    const candidates = Array.from(new Set((candidateSessionIds ?? []).filter((id) => typeof id === 'string' && id.length > 0)));
+    if (candidates.length > 0) {
+      const results = await Promise.all(candidates.map(async (id) => {
+        try {
+          const response = await codexClient.readThread(id, { includeTurns: false });
+          return extractObject(response, 'thread') as CodexThread | null;
+        } catch {
+          return null;
+        }
+      }));
+      if (results.some((thread) => thread === null)) {
+        return null;
+      }
+      for (const thread of results) {
+        if (!thread || typeof thread.id !== 'string') continue;
+        const status = this.toSessionStatus(thread);
+        if (status && status.type !== 'idle') {
+          statuses[thread.id] = status;
+        }
+      }
+      return statuses;
+    }
+
+    const response = await codexClient.listThreads({
+      archived: false,
+      cwd: typeof directory === 'string' ? directory : this.getDirectory() ?? undefined,
+      limit: 200,
+    });
+    for (const thread of extractArray(response) as CodexThread[]) {
+      if (!thread || typeof thread.id !== 'string') continue;
+      const status = this.toSessionStatus(thread);
+      if (status && status.type !== 'idle') {
+        statuses[thread.id] = status;
+      }
+    }
+    return statuses;
   }
 
   async listPendingQuestions(_options?: unknown): Promise<QuestionRequest[]> {
@@ -1087,9 +1135,23 @@ class CodexCompatClient {
     }
 
     if (method === 'thread/status/changed' && typeof params.threadId === 'string') {
-      const statusType = params.status === 'running' || params.status === 'busy' || this.activeTurns.has(params.threadId) || this.pendingTurns.has(params.threadId)
+      const status = this.toSessionStatus({ id: params.threadId, status: params.status })
+        ?? { type: 'idle' };
+      if (status.type === 'error') {
+        this.pendingTurns.delete(params.threadId);
+        this.activeTurns.delete(params.threadId);
+        push(params.threadId, {
+          type: 'session.status',
+          properties: {
+            sessionID: params.threadId,
+            status,
+          },
+        } as Event);
+        return events;
+      }
+      const statusType = status.type === 'busy' || this.activeTurns.has(params.threadId) || this.pendingTurns.has(params.threadId)
         ? 'busy'
-        : 'idle';
+        : status.type;
       push(params.threadId, {
         type: 'session.status',
         properties: {
@@ -1215,6 +1277,71 @@ class CodexCompatClient {
         codexThread: thread,
       },
       codexThread: thread,
+    };
+  }
+
+  private readThreadStatusValue(thread: CodexThread): string | null {
+    const status = thread.status;
+    if (typeof status === 'string') return status;
+    if (status && typeof status === 'object' && typeof status.type === 'string') return status.type;
+    return null;
+  }
+
+  private isSystemErrorThread(thread: CodexThread): boolean {
+    return this.readThreadStatusValue(thread) === 'systemError';
+  }
+
+  private toSessionStatus(thread: CodexThread): CompatSessionStatus | null {
+    const status = this.readThreadStatusValue(thread);
+    if (!status) return null;
+    if (status === 'active' || status === 'running' || status === 'busy') {
+      return { type: 'busy' };
+    }
+    if (status === 'systemError') {
+      return { type: 'error', message: CODEX_SYSTEM_ERROR_MESSAGE };
+    }
+    return { type: 'idle' };
+  }
+
+  private shouldAppendSystemErrorMessage(records: CompatMessageRecord[], turns: CodexTurn[]): boolean {
+    if (records.some((record) => record.info.role === 'assistant')) return false;
+    return turns.some((turn) => (
+      turn
+      && typeof turn === 'object'
+      && turn.status === 'completed'
+      && Array.isArray(turn.items)
+      && turn.items.some((item: CodexThreadItem) => item?.type === 'userMessage')
+    ));
+  }
+
+  private async readThreadForStatus(id: string): Promise<CodexThread | null> {
+    try {
+      const response = await codexClient.readThread(id, { includeTurns: false });
+      return extractObject(response, 'thread') as CodexThread | null;
+    } catch {
+      return null;
+    }
+  }
+
+  private toSystemErrorMessageRecord(sessionId: string, turns: CodexTurn[]): CompatMessageRecord {
+    const lastTurn = [...turns].reverse().find((turn) => turn && typeof turn === 'object') ?? null;
+    const timeValue = firstTimestamp(lastTurn?.completedAt, lastTurn?.startedAt) ?? Date.now();
+    const time = { created: timeValue, completed: timeValue };
+    const id = `${sessionId}:codex-system-error`;
+    return {
+      info: {
+        id,
+        sessionID: sessionId,
+        role: 'assistant',
+        time,
+        status: 'error',
+        finish: 'error',
+        error: {
+          name: 'CodexSystemError',
+          message: CODEX_SYSTEM_ERROR_MESSAGE,
+        },
+      },
+      parts: [],
     };
   }
 
